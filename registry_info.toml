@@ -1,0 +1,15 @@
+[docker-official]
+host = "index.docker.io"
+username = ""
+password = ""
+scheme = "https"
+[docker-mirror]
+host = "hub-mirror.c.163.com"
+username = ""
+password = ""
+scheme = "http"
+[harbor]
+host = ""
+username = ""
+password = ""
+scheme = "http"

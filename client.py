@@ -1,94 +1,69 @@
 #!/usr/bin/python3
 # encoding: utf-8
-import base64
-from dataclasses import dataclass
-import datetime
-from typing import Dict, Optional, Tuple, Union, TypeAlias
+from typing import Dict, Optional, Union, Type
 
 import requests
 from loguru import logger
 
-from utlis import RegistryScope, RepositoryScope, IMAGE_DEFAULT_TAG, DEFAULT_REPO
+from utlis import (
+    RegistryScope,
+    RepositoryScope,
+    IMAGE_DEFAULT_TAG,
+    DEFAULT_REPO,
+    DEFAULT_REGISTRY_HOST,
+    ScopeType,
+    PingResp,
+    BearerChallengeHandler,
+    ChallengeScheme,
+    ChallengeHandler,
+)
 
 logger.add("./client.log", level="INFO")
-ScopeType: TypeAlias = Union[RegistryScope, RepositoryScope]
-
-
-@dataclass
-class TokenResp:
-    token: str
-    expires_in: float
-    issued_at: str
-    access_token: Optional[str] = ""
-
-    @property
-    def registry_token(self) -> str:
-        return self.access_token or self.token
-
-    @property
-    def expiration(self) -> datetime.datetime:
-        issued_at = datetime.datetime.strptime(self.issued_at, "%Y-%m-%dT%H:%M:%SZ")
-        return datetime.timedelta(seconds=self.expires_in) + issued_at
 
 
 class ImageClient:
-    def __init__(self, host: str, username: str, password: str, schema: str = "https"):
+    def __init__(
+            self,
+            host: str,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            scheme: str = "https",
+    ):
         self._host: str = host
         self._username: str = username
         self._password: str = password
-        self._schema: str = schema
-        self._base_url = f"{schema}://{host}"
+        self._schema: str = scheme
+        self._base_url = f"{scheme}://{host}"
         self._realm: Optional[str] = None
         self._service: Optional[str] = None
-        self._basic_auth = self._encode_basic_auth()
 
-    def __post_init__(self):
-        self._base_url = f"{self._schema}://{self._host}"
-
-    def _parse_ping_resp(self, resp: requests.Response) -> Tuple[str, Dict]:
-        logger.debug(
-            f"{resp.headers=}, {resp.text=}, {resp.status_code=}"
-        )
+    def ping(self) -> Optional[PingResp]:
+        resp = requests.get(f"{self._base_url}/v2/")
+        logger.debug(f"{resp.headers=}, {resp.text=}, {resp.status_code=}")
         auth_header = resp.headers.get("WWW-Authenticate", None)
         if auth_header is None:
-            raise Exception(f"Get Auth Server Error: {resp.headers}")
-        scheme, params = auth_header.split(" ")
-        param_dict = dict(param.split("=") for param in params.split(","))
-        return scheme, param_dict
-
-    def ping(self) -> Tuple[str, Dict]:
-        resp = requests.get(f"{self._base_url}/v2/")
-        return self._parse_ping_resp(resp)
-
-    def _encode_basic_auth(self):
-        base_str = f"{self._username}:{self._password}"
-        return base64.b64encode(base_str.encode()).decode()
+            return None
+        return PingResp(auth_header)
 
     def auth_header(self, scope: Union[str, RegistryScope, RepositoryScope] = ""):
-        token = self.get_token(scope=scope)
-        return {"Authorization": f"Bearer {token.registry_token}"}
+        ping_resp = self.ping()
+        if ping_resp is None:
+            return {}
+        return self._handle_challenges(ping_resp, scope)
 
-    def get_token(
-        self, scope: Union[str, RegistryScope, RepositoryScope] = ""
-    ) -> TokenResp:
-        if self._realm is None:
-            _, param = self.ping()
-            self._realm = param["realm"].strip('"')
-            self._service = param["service"].strip('"')
-
-        params = {
-            "scope": str(scope),
-            "service": self._service,
-            "client_id": "registry-client",
-            "account": self._username,
+    def _handle_challenges(self, challenge: PingResp, scope: ScopeType) -> Dict:
+        scheme_dict: Dict[ChallengeScheme, Type[ChallengeHandler]] = {
+            ChallengeScheme.Bearer: BearerChallengeHandler
         }
-        headers = {"Authorization": f"Basic {self._basic_auth}"}
-        resp = requests.get(self._realm, params=params, verify=False, headers=headers)
-        logger.debug(f"{resp.text=}, {resp.headers=} {resp.status_code=}")
-        return TokenResp(**resp.json())
+        handler = scheme_dict.get(challenge.scheme, None)
+        if handler is None:
+            return {}
+        return handler(
+            challenge, self._username, self._password, scope
+        ).get_auth_header()
 
     def _request(
-        self, suffix: str, scope: ScopeType, method: str, **kwargs
+            self, suffix: str, scope: ScopeType, method: str, **kwargs
     ) -> requests.Response:
         if not suffix.startswith("/"):
             suffix = f"/{suffix}"
@@ -106,10 +81,10 @@ class ImageClient:
         return self._request(suffix=suffix, scope=scope, method="GET").json()
 
     def head_image_with_tag(
-        self,
-        image_name: str,
-        repo_name: str = DEFAULT_REPO,
-        tag: str = IMAGE_DEFAULT_TAG,
+            self,
+            image_name: str,
+            repo_name: str = DEFAULT_REPO,
+            tag: str = IMAGE_DEFAULT_TAG,
     ):
         suffix = f"/v2/{repo_name}/{image_name}/manifests/{tag}"
         scope = RepositoryScope(f"{repo_name}/{image_name}", ["pull"])
@@ -117,10 +92,10 @@ class ImageClient:
 
 
 if __name__ == "__main__":
-    harbor_ip = ""
-    username = ""
-    password = ""
+    from tomlkit import parse
 
-    c = ImageClient(harbor_ip, username, password, "http")
-    a = c.head_image_with_tag("image_name", repo_name="library", tag="latest")
+    with open("./registry_info.toml", "r", encoding="utf-8") as f:
+        info = parse(f.read())
+    c = ImageClient(**info.get("docker-mirror"))
+    a = c.head_image_with_tag("python", repo_name="library")
     logger.info(a.headers.get("Etag"))
