@@ -2,7 +2,7 @@ import base64
 import datetime
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, TypeAlias, Union, Dict
+from typing import Optional, TypeAlias, Union, Dict, List
 
 import requests
 from loguru import logger
@@ -89,7 +89,7 @@ class ChallengeHandler:
 
 @dataclass
 class BearerChallengeHandler(ChallengeHandler):
-    schema = ChallengeScheme.Bearer
+    scheme = ChallengeScheme.Bearer
 
     def _encode_basic_auth(self):
         base_str = f"{self.username}:{self.password}"
@@ -109,3 +109,34 @@ class BearerChallengeHandler(ChallengeHandler):
         logger.debug(f"{resp.text=}, {resp.headers=} {resp.status_code=}")
         token_resp = TokenResp(**resp.json())
         return {"Authorization": f"Bearer {token_resp.registry_token}"}
+
+
+class Digest:
+    def __init__(self, value: str):
+        self.scheme, self.value = value.split(":")
+
+    def __str__(self):
+        return f"{self.scheme}:{self.value}"
+
+
+@dataclass
+class LayerResp:
+    mediaType: str
+    size: int
+    digest: Digest
+
+    def __post_init__(self):
+        self.digest = Digest(self.digest)
+
+
+@dataclass
+class ManifestsResp:
+    schemaVersion: int
+    mediaType: str
+    config: LayerResp
+    layers: List[LayerResp]
+
+    def __post_init__(self):
+        self.config = LayerResp(**self.config)
+        self.layers = [LayerResp(**one) for one in self.layers]
+
