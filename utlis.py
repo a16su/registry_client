@@ -123,10 +123,7 @@ class Digest:
 class LayerResp:
     mediaType: str
     size: int
-    digest: Digest
-
-    def __post_init__(self):
-        self.digest = Digest(self.digest)
+    digest: str
 
 
 @dataclass
@@ -139,4 +136,3 @@ class ManifestsResp:
     def __post_init__(self):
         self.config = LayerResp(**self.config)
         self.layers = [LayerResp(**one) for one in self.layers]
-

@@ -3,9 +3,11 @@
 import hashlib
 import pathlib
 from typing import Dict, Optional, Union, Type
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from loguru import logger
+from tqdm import tqdm
 
 from utlis import (
     RegistryScope,
@@ -16,7 +18,8 @@ from utlis import (
     PingResp,
     BearerChallengeHandler,
     ChallengeScheme,
-    ChallengeHandler, ManifestsResp,
+    ChallengeHandler,
+    ManifestsResp,
 )
 
 logger.add("./client.log", level="INFO")
@@ -24,11 +27,11 @@ logger.add("./client.log", level="INFO")
 
 class ImageClient:
     def __init__(
-            self,
-            host: str,
-            username: Optional[str] = None,
-            password: Optional[str] = None,
-            scheme: str = "https",
+        self,
+        host: str,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        scheme: str = "https",
     ):
         self._host: str = host
         self._username: str = username
@@ -67,7 +70,7 @@ class ImageClient:
         ).get_auth_header()
 
     def _request(
-            self, suffix: str, scope: ScopeType, method: str, **kwargs
+        self, suffix: str, scope: ScopeType, method: str, **kwargs
     ) -> requests.Response:
         if not suffix.startswith("/"):
             suffix = f"/{suffix}"
@@ -80,7 +83,9 @@ class ImageClient:
             headers = headers_in_param
             del kwargs["headers"]
         logger.debug(f"{suffix=}, {scope=}, {method=}, {kwargs=}, {headers=}")
-        return requests.request(method=method.upper(), url=url, headers=headers, **kwargs)
+        return requests.request(
+            method=method.upper(), url=url, headers=headers, **kwargs
+        )
 
     def list_registry(self) -> Dict:
         suffix = "/v2/_catalog"
@@ -88,11 +93,7 @@ class ImageClient:
         return self._request(suffix=suffix, scope=scope, method="GET").json()
 
     def _image_manifest(
-            self,
-            method: str,
-            image_path: str,
-            reference: str,
-            auth_info: Dict[str, str]
+        self, method: str, image_path: str, reference: str, auth_info: Dict[str, str]
     ) -> requests.Response:
         """
         fetch or check image manifest
@@ -103,26 +104,78 @@ class ImageClient:
         """
         suffix = f"/v2/{image_path}/manifests/{reference}"
         logger.debug(f"{suffix=}, {auth_info=}")
-        return requests.request(url=f"{self._base_url}{suffix}", method=method, headers=auth_info)
+        return requests.request(
+            url=f"{self._base_url}{suffix}", method=method, headers=auth_info
+        )
 
-    def fetch_image_manifest(self, image_path: str, reference: str, auth_info: Dict[str, str]):
-        resp = self._image_manifest("GET", image_path=image_path, reference=reference, auth_info=auth_info)
+    @classmethod
+    def _resp_sha256(cls, resp: requests.Response):
+        return hashlib.sha256(resp.content).hexdigest()
+
+    @logger.catch
+    def fetch_image_manifest(
+        self, image_path: str, reference: str, auth_info: Dict[str, str]
+    ):
+        resp = self._image_manifest(
+            "GET", image_path=image_path, reference=reference, auth_info=auth_info
+        )
         if reference.startswith("sha256:"):  # check resp sha256
             logger.info("check manifest sha256 is equal to digest")
-            resp_sha256 = hashlib.sha256(resp.content).hexdigest()
+            resp_sha256 = self._resp_sha256(resp)
             assert reference[7:] == resp_sha256, resp_sha256
         return resp
 
-    def image_manifest_existed(self, image_path: str, reference: str, auth_info) -> requests.Response:
+    def image_manifest_existed(
+        self, image_path: str, reference: str, auth_info
+    ) -> requests.Response:
         resp = self._image_manifest("HEAD", image_path, reference, auth_info)
         logger.debug(f"{resp.status_code=},{resp.text=}")
         return resp
 
-    def _pull_schema2_config(self, url_base: str, digest: str):
-        suffix = f"{url_base}/{digest}"
+    def _pull_schema2_config(
+        self, url_base: str, digest: str, headers: Dict[str, str]
+    ) -> requests.Response:
+        url = f"{self._base_url}/v2/{url_base}/blobs/{digest}"
+        return requests.get(url, headers=headers)
 
-    def pull_image(self, image_name: str, repo_name: str = DEFAULT_REPO, reference: str = IMAGE_DEFAULT_TAG,
-                   save_dir: Union[pathlib.Path, str] = None):
+    @logger.catch
+    def _download_layer(
+        self,
+        base_url: str,
+        digest: str,
+        save_dir: pathlib.Path,
+        headers: Dict[str, str],
+    ) -> pathlib.Path:
+        url = f"{self._base_url}/v2/{base_url}/blobs/{digest}"
+        tmp_file = save_dir.joinpath(digest[7:])
+        text = f"{digest[7:15]}: "
+        with requests.get(url, headers=headers, stream=True) as resp, open(
+            tmp_file, "wb"
+        ) as f, tqdm(
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            total=int(resp.headers.get("content-length")),
+            desc=text,
+        ) as progress:
+            hasher = hashlib.sha256()
+            for chunk in resp.iter_content(5120):
+                if chunk:
+                    data_size = f.write(chunk)
+                    progress.update(data_size)
+                    hasher.update(chunk)
+            assert hasher.hexdigest() == digest[7:]
+            logger.info(f"download to {tmp_file}")
+        return tmp_file
+
+    @logger.catch
+    def pull_image(
+        self,
+        image_name: str,
+        repo_name: str = DEFAULT_REPO,
+        reference: str = IMAGE_DEFAULT_TAG,
+        save_dir: Union[pathlib.Path, str] = None,
+    ):
         save_dir = pathlib.Path(save_dir or ".").absolute()
         if not save_dir.is_dir():
             raise Exception(f"save dir {save_dir} not exists")
@@ -131,12 +184,44 @@ class ImageClient:
         image_name_with_repo = f"{repo_name}/{image_name}"
         scope = RepositoryScope(image_name_with_repo, ["pull"])
         headers = self.auth_header(scope)
-        head_resp = self.image_manifest_existed(image_name_with_repo, reference=reference, auth_info=headers)
+        headers["Accept"] = "application/vnd.docker.distribution.manifest.v2+json"
+        head_resp = self.image_manifest_existed(
+            image_name_with_repo, reference=reference, auth_info=headers
+        )
         if head_resp.status_code != 200:
             raise Exception(f"{image_name_with_repo}:{reference} not found")
         main_manifest = head_resp.headers.get("Docker-Content-Digest")
-        manifest_resp = self.fetch_image_manifest(image_name_with_repo, reference=main_manifest, auth_info=headers)
+        manifest_resp = self.fetch_image_manifest(
+            image_name_with_repo, reference=main_manifest, auth_info=headers
+        )
         manifest = ManifestsResp(**manifest_resp.json())
+        image_config = self._pull_schema2_config(
+            image_name_with_repo, manifest.config.digest, headers
+        )
+
+        image_save_dir = save_dir.joinpath(image_name_with_repo, reference)
+        image_save_dir.mkdir(parents=True, exist_ok=True)
+        config_digest = self._resp_sha256(image_config)
+        assert config_digest == image_config.headers.get("Docker-Content-Digest")[7:]
+        with open(image_save_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
+            f.write(manifest_resp.text)
+        with open(
+            image_save_dir.joinpath(f"image_config.json"), "w", encoding="utf-8"
+        ) as f:
+            f.write(image_config.text)
+
+        # layer_files = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            jobs = [
+                executor.submit(
+                    self._download_layer,
+                    image_name_with_repo,
+                    layer.digest,
+                    image_save_dir,
+                    headers,
+                )
+                for layer in manifest.layers
+            ]
 
 
 if __name__ == "__main__":
@@ -144,6 +229,9 @@ if __name__ == "__main__":
 
     with open("./registry_info.toml", "r", encoding="utf-8") as f:
         info = parse(f.read())
-    c = ImageClient(**info.get("docker-mirror"))
-    a = c.head_image_with_tag("python", repo_name="library")
-    logger.info(a.headers.get("Etag"))
+    img_name = "python"
+    repo = "test"
+    ref = "3.10.6"
+
+    c = ImageClient(**info.get("harbor"))
+    c.pull_image(image_name=img_name, repo_name=repo, reference=ref)
