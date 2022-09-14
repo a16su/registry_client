@@ -20,7 +20,7 @@ from utlis import (
     BearerChallengeHandler,
     ChallengeScheme,
     ChallengeHandler,
-    ManifestsResp,
+    ManifestsResp, Platform, DEFAULT_REGISTRY_HOST,
 )
 from decompress import GZipDeCompress
 
@@ -34,6 +34,7 @@ class ImageClient:
             username: Optional[str] = None,
             password: Optional[str] = None,
             scheme: str = "https",
+            platform: Platform = Platform()
     ):
         self._host: str = host
         self._username: str = username
@@ -42,6 +43,7 @@ class ImageClient:
         self._base_url = f"{scheme}://{host}"
         self._ping_resp: Optional[PingResp] = None
         self._pinged = False
+        self._default_headers = {}
 
     def ping(self) -> Optional[PingResp]:
         resp = requests.get(f"{self._base_url}/v2/")
@@ -138,7 +140,9 @@ class ImageClient:
             self, url_base: str, digest: str, headers: Dict[str, str]
     ) -> requests.Response:
         url = f"{self._base_url}/v2/{url_base}/blobs/{digest}"
-        return requests.get(url, headers=headers)
+        resp = requests.get(url, headers=headers)
+        logger.debug(resp.headers)
+        return resp
 
     @logger.catch
     def _download_and_decompress_layer(
@@ -194,6 +198,7 @@ class ImageClient:
         scope = RepositoryScope(image_name_with_repo, ["pull"])
         headers = self.auth_header(scope)
         headers["Accept"] = "application/vnd.docker.distribution.manifest.v2+json"
+        headers.update(self._default_headers)
         head_resp = self.image_manifest_existed(
             image_name_with_repo, reference=reference, auth_info=headers
         )
@@ -202,7 +207,8 @@ class ImageClient:
         main_manifest = head_resp.headers.get("Docker-Content-Digest")
         manifest_resp = self.fetch_image_manifest(
             image_name_with_repo, reference=main_manifest, auth_info=headers
-        )
+        )  # TODO: handle response.headers.content-type
+        logger.info(manifest_resp.json())
         manifest = ManifestsResp(**manifest_resp.json())
         image_config = self._pull_schema2_config(
             image_name_with_repo, manifest.config.digest, headers
@@ -211,7 +217,6 @@ class ImageClient:
         image_save_dir = save_dir.joinpath(image_name_with_repo, reference)
         image_save_dir.mkdir(parents=True, exist_ok=True)
         config_digest = self._resp_sha256(image_config)
-        assert config_digest == image_config.headers.get("Docker-Content-Digest")[7:]
         with open(
                 image_save_dir.joinpath(f"{config_digest}.json"), "w", encoding="utf-8"
         ) as f:
@@ -234,9 +239,13 @@ class ImageClient:
             ]
 
         with open(image_save_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
+            if self._host == DEFAULT_REGISTRY_HOST and repo == DEFAULT_REPO:
+                repo_tags = [f"{image_name}:{reference}"]
+            else:
+                repo_tags = [f"{self._host}/{repo_name}/{image_name}:{reference}"]
             data = {
                 "Config": f"{config_digest}.json",
-                "RepoTags": [f"{self._host}/{repo_name}/{image_name}:{reference}"],
+                "RepoTags": repo_tags,
                 "Layers": [f"{digest[7:]}/layer.tar" for digest in digests]
             }
             json.dump([data], f)

@@ -1,20 +1,23 @@
 import base64
 import datetime
 import hashlib
-import json
+import platform
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, TypeAlias, Union, Dict, List
+from typing import Optional, Union, Dict, List
 
 import requests
 from loguru import logger
 
 IMAGE_DEFAULT_TAG: str = "latest"
 DEFAULT_REPO: str = "library"
-DEFAULT_REGISTRY_HOST: str = "index.docker.io"
+DEFAULT_REGISTRY_HOST: str = "registry.docker.io"
 DEFAULT_CLIENT_ID = "registry-python-client"
+DEFAULT_SYSTEM = platform.system()
+DEFAULT_MACHINE = platform.machine()
 
-ScopeType: TypeAlias = Union["RegistryScope", "RepositoryScope"]
+
+ScopeType = Union["RegistryScope", "RepositoryScope"]
 
 BZIP_MAGIC = b"\x42\x5A\x68"
 GZIP_MAGIC = b"\x1F\x8B\x8B"
@@ -49,6 +52,29 @@ def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
     if parent != "":
         config["parent"] = parent
     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
+
+
+class System(Enum):
+    Windows = "Windows"
+    Linux = "Linux"
+    Mac = "Darwin"
+
+
+class Machine(Enum):
+    INTEL_386 = "386"
+    ARM = "ARM"
+    AMD_64 = "AMD64"
+    MIPS_64le = "MIPS64LE"
+    ARM_64 = "ARM64"
+    S390X = "S390X"
+    PPC_64LE = "PPC64LE"
+    RISCV_64 = "RISCV64"
+
+
+@dataclass
+class Platform:
+    os_name: System = System(DEFAULT_SYSTEM)
+    arch: Machine = Machine(DEFAULT_MACHINE)
 
 
 @dataclass
@@ -155,7 +181,10 @@ class BearerChallengeHandler(ChallengeHandler):
             "client_id": self.client_id,
             "account": self.username,
         }
-        headers = {"Authorization": f"Basic {self._encode_basic_auth()}"}
+        if "docker.io" in self.ping_resp.realm:
+            headers = None
+        else:
+            headers = {"Authorization": f"Basic {self._encode_basic_auth()}"}
         resp = requests.get(
             self.ping_resp.realm, params=params, verify=False, headers=headers
         )

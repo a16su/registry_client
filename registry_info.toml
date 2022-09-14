@@ -1,5 +1,5 @@
 [docker-official]
-host = "index.docker.io"
+host = "registry-1.docker.io"
 username = ""
 password = ""
 scheme = "https"
