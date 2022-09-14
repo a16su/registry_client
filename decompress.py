@@ -1,3 +1,4 @@
+import os
 import pathlib
 import gzip
 import tarfile
@@ -34,10 +35,13 @@ class TarImageDir:
         assert not self.target_path.is_dir()
 
     def do(self):
-        with tarfile.open(self.target_path, "w:gz") as tar_file:
-            for filename in self.src_dir.rglob("*"):
+        old_dir = pathlib.Path(".").absolute()
+        with tarfile.open(self.target_path, "w") as tar_file:
+            os.chdir(self.src_dir)
+            for filename in pathlib.Path(".").iterdir():
                 logger.info(f"compress {filename}")
                 tar_file.add(filename)
+        os.chdir(old_dir)
 
 
 if __name__ == '__main__':

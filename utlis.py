@@ -16,7 +16,6 @@ DEFAULT_CLIENT_ID = "registry-python-client"
 DEFAULT_SYSTEM = platform.system()
 DEFAULT_MACHINE = platform.machine()
 
-
 ScopeType = Union["RegistryScope", "RepositoryScope"]
 
 BZIP_MAGIC = b"\x42\x5A\x68"
@@ -45,10 +44,7 @@ def diff_ids_to_chain_ids(diff_ids: List[str]) -> List[str]:
 
 
 def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
-    config = {
-        "created": "1970-01-01T08:00:00+08:00",
-        "layer_id": layer_id
-    }
+    config = {"created": "1970-01-01T08:00:00+08:00", "layer_id": layer_id}
     if parent != "":
         config["parent"] = parent
     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
@@ -69,6 +65,7 @@ class Machine(Enum):
     S390X = "S390X"
     PPC_64LE = "PPC64LE"
     RISCV_64 = "RISCV64"
+    X86_64 = "x86_64"
 
 
 @dataclass

@@ -20,9 +20,11 @@ from utlis import (
     BearerChallengeHandler,
     ChallengeScheme,
     ChallengeHandler,
-    ManifestsResp, Platform, DEFAULT_REGISTRY_HOST,
+    ManifestsResp,
+    Platform,
+    DEFAULT_REGISTRY_HOST,
 )
-from decompress import GZipDeCompress
+from decompress import GZipDeCompress, TarImageDir
 
 logger.add("./client.log", level="INFO")
 
@@ -34,7 +36,7 @@ class ImageClient:
             username: Optional[str] = None,
             password: Optional[str] = None,
             scheme: str = "https",
-            platform: Platform = Platform()
+            platform: Platform = Platform(),
     ):
         self._host: str = host
         self._username: str = username
@@ -151,7 +153,7 @@ class ImageClient:
             digest: str,
             save_dir: pathlib.Path,
             headers: Dict[str, str],
-            index: int
+            index: int,
     ) -> pathlib.Path:
         url = f"{self._base_url}/v2/{base_url}/blobs/{digest}"
         tmp_file = save_dir.joinpath(f"layer_{index}.tar.gz")
@@ -187,7 +189,7 @@ class ImageClient:
             repo_name: str = DEFAULT_REPO,
             reference: str = IMAGE_DEFAULT_TAG,
             save_dir: Union[pathlib.Path, str] = None,
-            check_layer: bool = False
+            check_layer: bool = False,
     ):
         save_dir = pathlib.Path(save_dir or ".").absolute()
         if not save_dir.is_dir():
@@ -246,11 +248,16 @@ class ImageClient:
             data = {
                 "Config": f"{config_digest}.json",
                 "RepoTags": repo_tags,
-                "Layers": [f"{digest[7:]}/layer.tar" for digest in digests]
+                "Layers": [f"{digest[7:]}/layer.tar" for digest in digests],
             }
             json.dump([data], f)
         with open(image_save_dir.joinpath(digests[-1][7:], "json"), "w") as f:
             json.dump(image_config.json(), f)
+
+        TarImageDir(
+            image_save_dir, save_dir.joinpath(f"{repo_name}_{image_name}.tar")
+        ).do()
+        shutil.rmtree(pathlib.Path(".").joinpath(repo).absolute())
 
 
 if __name__ == "__main__":
