@@ -1,7 +1,6 @@
 import base64
 import datetime
 import hashlib
-import platform
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Union, Dict, List
@@ -9,12 +8,12 @@ from typing import Optional, Union, Dict, List
 import requests
 from loguru import logger
 
+from src.digest import Digest
+
 IMAGE_DEFAULT_TAG: str = "latest"
 DEFAULT_REPO: str = "library"
 DEFAULT_REGISTRY_HOST: str = "registry.docker.io"
 DEFAULT_CLIENT_ID = "registry-python-client"
-DEFAULT_SYSTEM = platform.system()
-DEFAULT_MACHINE = platform.machine()
 
 ScopeType = Union["RegistryScope", "RepositoryScope"]
 
@@ -48,30 +47,6 @@ def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
     if parent != "":
         config["parent"] = parent
     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
-
-
-class System(Enum):
-    Windows = "Windows"
-    Linux = "Linux"
-    Mac = "Darwin"
-
-
-class Machine(Enum):
-    INTEL_386 = "386"
-    ARM = "ARM"
-    AMD_64 = "AMD64"
-    MIPS_64le = "MIPS64LE"
-    ARM_64 = "ARM64"
-    S390X = "S390X"
-    PPC_64LE = "PPC64LE"
-    RISCV_64 = "RISCV64"
-    X86_64 = "x86_64"
-
-
-@dataclass
-class Platform:
-    os_name: System = System(DEFAULT_SYSTEM)
-    arch: Machine = Machine(DEFAULT_MACHINE)
 
 
 @dataclass
@@ -190,19 +165,14 @@ class BearerChallengeHandler(ChallengeHandler):
         return {"Authorization": f"Bearer {token_resp.registry_token}"}
 
 
-class Digest:
-    def __init__(self, value: str):
-        self.scheme, self.value = value.split(":")
-
-    def __str__(self):
-        return f"{self.scheme}:{self.value}"
-
-
 @dataclass
 class LayerResp:
     mediaType: str
     size: int
-    digest: str
+    digest: Digest
+
+    def __post_init__(self):
+        self.digest = Digest(self.digest)
 
 
 @dataclass

@@ -44,7 +44,7 @@ class TarImageDir:
         os.chdir(old_dir)
 
 
-if __name__ == '__main__':
-    b = pathlib.Path("./test/python/3.10.6/")
-    a = TarImageDir(b, b.parent.joinpath("test.tar.gz"))
+if __name__ == "__main__":
+    b = pathlib.Path("./library/hello-world/latest")
+    a = TarImageDir(b, b.parent.joinpath("test.tar"))
     a.do()
