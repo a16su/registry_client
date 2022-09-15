@@ -4,6 +4,7 @@ import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Union, Dict, List
+from urllib.parse import urlparse
 
 import requests
 from loguru import logger
@@ -134,17 +135,21 @@ class ChallengeHandler:
     def __post_init__(self):
         assert self.ping_resp.scheme == self.scheme
 
+    def _encode_basic_auth(self):
+        base_str = f"{self.username}:{self.password}"
+        return base64.b64encode(base_str.encode()).decode()
+
     def get_auth_header(self) -> Dict[str, str]:
         raise NotImplementedError
+
+    @property
+    def is_official(self) -> bool:
+        return urlparse(self.ping_resp.realm).hostname.endswith("docker.io")
 
 
 @dataclass
 class BearerChallengeHandler(ChallengeHandler):
     scheme = ChallengeScheme.Bearer
-
-    def _encode_basic_auth(self):
-        base_str = f"{self.username}:{self.password}"
-        return base64.b64encode(base_str.encode()).decode()
 
     def get_auth_header(self):
         params = {
@@ -153,7 +158,7 @@ class BearerChallengeHandler(ChallengeHandler):
             "client_id": self.client_id,
             "account": self.username,
         }
-        if "docker.io" in self.ping_resp.realm:
+        if self.is_official:
             headers = None
         else:
             headers = {"Authorization": f"Basic {self._encode_basic_auth()}"}
@@ -163,6 +168,16 @@ class BearerChallengeHandler(ChallengeHandler):
         logger.debug(f"{resp.text=}, {resp.headers=} {resp.status_code=}")
         token_resp = TokenResp(**resp.json())
         return {"Authorization": f"Bearer {token_resp.registry_token}"}
+
+
+@dataclass
+class BasicChallengeHandler(ChallengeHandler):
+    scheme = ChallengeScheme.Basic
+
+    def get_auth_header(self) -> Dict[str, str]:
+        if self.is_official:
+            return {}
+        return {"Authorization": f"Basic {self._encode_basic_auth()}"}
 
 
 @dataclass

@@ -24,6 +24,7 @@ from utlis import (
     ChallengeHandler,
     ManifestsResp,
     DEFAULT_REGISTRY_HOST,
+    BasicChallengeHandler,
 )
 from src.platforms import Platform
 from decompress import GZipDeCompress, TarImageDir
@@ -50,7 +51,7 @@ class ImageClient:
         self._default_headers = {}
 
     def ping(self) -> Optional[PingResp]:
-        resp = requests.get(f"{self._base_url}/v2/")
+        resp = requests.get(f"{self._base_url}/v2/", verify=False)
         logger.debug(f"{resp.headers=}, {resp.text=}, {resp.status_code=}")
         auth_header = resp.headers.get("WWW-Authenticate", None)
         if auth_header is None:
@@ -68,7 +69,8 @@ class ImageClient:
 
     def _handle_challenges(self, challenge: PingResp, scope: ScopeType) -> Dict:
         scheme_dict: Dict[ChallengeScheme, Type[ChallengeHandler]] = {
-            ChallengeScheme.Bearer: BearerChallengeHandler
+            ChallengeScheme.Bearer: BearerChallengeHandler,
+            ChallengeScheme.Basic: BasicChallengeHandler,
         }
         handler = scheme_dict.get(challenge.scheme, None)
         if handler is None:
@@ -243,7 +245,7 @@ class ImageClient:
             else:
                 repo_tags = [f"{self._host}/{repo_name}/{image_name}:{reference}"]
             data = {
-                "Config": f"{config_digest}.json",
+                "Config": f"{config_digest.hex}.json",
                 "RepoTags": repo_tags,
                 "Layers": [f"{digest.hex}/layer.tar" for digest in digests],
             }
