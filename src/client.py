@@ -11,8 +11,8 @@ import requests
 from loguru import logger
 from tqdm import tqdm
 
-from digest import Digest
-from utlis import (
+from src.digest import Digest
+from src.utlis import (
     RegistryScope,
     RepositoryScope,
     IMAGE_DEFAULT_TAG,
@@ -27,7 +27,7 @@ from utlis import (
     BasicChallengeHandler,
 )
 from src.platforms import Platform
-from decompress import GZipDeCompress, TarImageDir
+from src.decompress import GZipDeCompress, TarImageDir
 
 logger.add("./client.log", level="INFO")
 
@@ -118,7 +118,6 @@ class ImageClient:
             url=f"{self._base_url}{suffix}", method=method, headers=auth_info
         )
 
-    @logger.catch
     def fetch_image_manifest(
         self, image_path: str, reference: str, auth_info: Dict[str, str]
     ):
@@ -145,7 +144,6 @@ class ImageClient:
         logger.debug(resp.headers)
         return resp
 
-    @logger.catch
     def _download_and_decompress_layer(
         self,
         base_url: str,
@@ -181,7 +179,6 @@ class ImageClient:
         tmp_file.unlink()
         return save_dir.joinpath(digest.hex, "layer.tar")
 
-    @logger.catch
     def pull_image(
         self,
         image_name: str,
@@ -240,7 +237,7 @@ class ImageClient:
             ]
 
         with open(image_save_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
-            if self._host == DEFAULT_REGISTRY_HOST and repo == DEFAULT_REPO:
+            if self._host == DEFAULT_REGISTRY_HOST and repo_name == DEFAULT_REPO:
                 repo_tags = [f"{image_name}:{reference}"]
             else:
                 repo_tags = [f"{self._host}/{repo_name}/{image_name}:{reference}"]
@@ -256,7 +253,9 @@ class ImageClient:
         TarImageDir(
             image_save_dir, save_dir.joinpath(f"{repo_name}_{image_name}.tar")
         ).do()
-        shutil.rmtree(pathlib.Path(".").joinpath(repo).absolute())
+        layer_save_dir = save_dir.joinpath(repo_name).absolute()
+        logger.info(f"rm layer download dir {layer_save_dir}")
+        shutil.rmtree(layer_save_dir)
 
 
 if __name__ == "__main__":
