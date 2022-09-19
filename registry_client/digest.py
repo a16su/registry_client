@@ -3,6 +3,8 @@ import re
 from enum import Enum
 from typing import Callable, Union, Any
 
+from pydantic.dataclasses import dataclass
+
 DIGEST_REGEX = re.compile(r"sha(256|384|512):[a-z0-9]{64}")
 
 
@@ -15,10 +17,13 @@ class Algorithm(Enum):
 DEFAULT_ALGORITHM = Algorithm.SHA256
 
 
+@dataclass
 class Digest:
-    def __init__(self, digest_str: str):
-        self._raw = digest_str
-        self._algorithm, self._hash = digest_str.split(":")
+    digest_str: str
+
+    def __post_init__(self):
+        self._raw = self.digest_str
+        self._algorithm, self._hash = self.digest_str.split(":")
         self._algorithm = Algorithm(self._algorithm)
 
     @classmethod
@@ -65,7 +70,7 @@ class Digest:
     def is_digest(cls, value: str):
         return DIGEST_REGEX.match(value)
 
-    def validate(self, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
+    def validate_bytes(self, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
         new_digest = self.from_bytes(content, algorithm)
         return self == new_digest
 
@@ -76,4 +81,4 @@ if __name__ == "__main__":
     print(d.hex)
     print(d.short)
     print(d.value)
-    assert d.validate("123".encode())
+    assert d.validate_bytes("123".encode())

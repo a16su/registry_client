@@ -11,8 +11,8 @@ import requests
 from loguru import logger
 from tqdm import tqdm
 
-from src.digest import Digest
-from src.utlis import (
+from registry_client.digest import Digest
+from registry_client.utlis import (
     RegistryScope,
     RepositoryScope,
     IMAGE_DEFAULT_TAG,
@@ -25,9 +25,11 @@ from src.utlis import (
     ManifestsResp,
     DEFAULT_REGISTRY_HOST,
     BasicChallengeHandler,
+    ManifestsListResp,
 )
-from src.platforms import Platform
-from src.decompress import GZipDeCompress, TarImageDir
+from registry_client.media_types import ImageMediaType
+from registry_client.platforms import Platform
+from registry_client.decompress import GZipDeCompress, TarImageDir
 
 logger.add("./client.log", level="INFO")
 
@@ -49,6 +51,7 @@ class ImageClient:
         self._ping_resp: Optional[PingResp] = None
         self._pinged = False
         self._default_headers = {}
+        self._platform = platform
 
     def ping(self) -> Optional[PingResp]:
         resp = requests.get(f"{self._base_url}/v2/", verify=False)
@@ -56,7 +59,7 @@ class ImageClient:
         auth_header = resp.headers.get("WWW-Authenticate", None)
         if auth_header is None:
             return None
-        return PingResp(auth_header)
+        return PingResp(headers=auth_header)
 
     def auth_header(self, scope: Union[str, RegistryScope, RepositoryScope] = ""):
         if self._pinged:
@@ -76,7 +79,10 @@ class ImageClient:
         if handler is None:
             return {}
         return handler(
-            challenge, self._username, self._password, scope
+            ping_resp=challenge,
+            username=self._username,
+            password=self._password,
+            scope=scope,
         ).get_auth_header()
 
     def _request(
@@ -119,15 +125,26 @@ class ImageClient:
         )
 
     def fetch_image_manifest(
-        self, image_path: str, reference: str, auth_info: Dict[str, str]
-    ):
+            self, image_path: str, reference: str, auth_info: Dict[str, str]
+    ) -> ManifestsResp:
         resp = self._image_manifest(
             "GET", image_path=image_path, reference=reference, auth_info=auth_info
         )
         if Digest.is_digest(reference):  # check resp sha256
             logger.info("check manifest sha256 is equal to digest")
             assert Digest(reference) == Digest.from_bytes(resp.content)
-        return resp
+        if (
+                resp.json()["mediaType"]
+                == ImageMediaType.MediaTypeDockerSchema2ManifestList.value
+        ):
+            target_digest = ManifestsListResp(**resp.json()).filter(self._platform)
+            resp = self._image_manifest(
+                "GET",
+                image_path=image_path,
+                reference=target_digest.value,
+                auth_info=auth_info,
+            )
+        return ManifestsResp(**resp.json())
 
     def image_manifest_existed(
         self, image_path: str, reference: str, auth_info
@@ -193,7 +210,7 @@ class ImageClient:
         save_dir.mkdir(exist_ok=True)
 
         image_name_with_repo = f"{repo_name}/{image_name}"
-        scope = RepositoryScope(image_name_with_repo, ["pull"])
+        scope = RepositoryScope(repo_name=image_name_with_repo, actions=["pull"])
         headers = self.auth_header(scope)
         headers["Accept"] = "application/vnd.docker.distribution.manifest.v2+json"
         headers.update(self._default_headers)
@@ -203,11 +220,9 @@ class ImageClient:
         if head_resp.status_code != 200:
             raise Exception(f"{image_name_with_repo}:{reference} not found")
         main_manifest = head_resp.headers.get("Docker-Content-Digest")
-        manifest_resp = self.fetch_image_manifest(
+        manifest = self.fetch_image_manifest(
             image_name_with_repo, reference=main_manifest, auth_info=headers
-        )  # TODO: handle response.headers.content-type
-        logger.info(manifest_resp.json())
-        manifest = ManifestsResp(**manifest_resp.json())
+        )
         image_config = self._pull_schema2_config(
             image_name_with_repo, manifest.config.digest, headers
         )
@@ -262,7 +277,9 @@ if __name__ == "__main__":
     from tomlkit import parse
 
     with open(
-        pathlib.Path(".").parent.joinpath("registry_info.toml"), "r", encoding="utf-8"
+            pathlib.Path(".").absolute().parent.joinpath("registry_info.toml"),
+            "r",
+            encoding="utf-8",
     ) as f:
         info = parse(f.read())
     img_name = "hello-world"

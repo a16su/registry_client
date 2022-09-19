@@ -1,7 +1,9 @@
 import base64
 import datetime
 import hashlib
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, Field
+from pydantic.dataclasses import dataclass
 from enum import Enum
 from typing import Optional, Union, Dict, List
 from urllib.parse import urlparse
@@ -9,7 +11,9 @@ from urllib.parse import urlparse
 import requests
 from loguru import logger
 
-from src.digest import Digest
+from registry_client.digest import Digest
+from registry_client.media_types import ImageMediaType
+from registry_client.platforms import Platform
 
 IMAGE_DEFAULT_TAG: str = "latest"
 DEFAULT_REPO: str = "library"
@@ -50,8 +54,7 @@ def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
 
 
-@dataclass
-class V1Image:
+class V1Image(BaseModel):
     id: Optional[str]
     parent: Optional[str]
     comment: Optional[str]
@@ -67,8 +70,7 @@ class V1Image:
     size: Optional[float]
 
 
-@dataclass
-class RepositoryScope:
+class RepositoryScope(BaseModel):
     repo_name: str
     actions: list[str]
     class_name: str = ""
@@ -80,8 +82,7 @@ class RepositoryScope:
         return f"{repo_type}:{self.repo_name}:{','.join(self.actions)}"
 
 
-@dataclass
-class RegistryScope:
+class RegistryScope(BaseModel):
     rs_name: str
     actions: list[str]
 
@@ -89,8 +90,7 @@ class RegistryScope:
         return f"registry:{self.rs_name}:{','.join(self.actions)}"
 
 
-@dataclass
-class TokenResp:
+class TokenResp(BaseModel):
     token: str
     expires_in: float
     issued_at: str
@@ -111,9 +111,12 @@ class ChallengeScheme(Enum):
     Basic = "Basic"
 
 
+@dataclass
 class PingResp:
-    def __init__(self, headers: str):
-        scheme, params = headers.split(" ")
+    headers: str
+
+    def __post_init__(self):
+        scheme, params = self.headers.split(" ")
         param_dict = dict(param.split("=") for param in params.split(","))
         self.scheme = ChallengeScheme(scheme)
         self.realm = param_dict.get("realm").strip('"')
@@ -123,16 +126,16 @@ class PingResp:
         return f"{self.scheme=}, {self.realm=}, {self.service=}"
 
 
-@dataclass
-class ChallengeHandler:
+class ChallengeHandler(BaseModel):
     ping_resp: PingResp
     username: str
     password: str
     scope: ScopeType
     client_id: str = DEFAULT_CLIENT_ID
-    scheme: ChallengeScheme = field(init=False)
+    scheme: ChallengeScheme = Field(default=None)
 
-    def __post_init__(self):
+    def __init__(self, **data):
+        super(ChallengeHandler, self).__init__(**data)
         assert self.ping_resp.scheme == self.scheme
 
     def _encode_basic_auth(self):
@@ -147,7 +150,6 @@ class ChallengeHandler:
         return urlparse(self.ping_resp.realm).hostname.endswith("docker.io")
 
 
-@dataclass
 class BearerChallengeHandler(ChallengeHandler):
     scheme = ChallengeScheme.Bearer
 
@@ -170,7 +172,6 @@ class BearerChallengeHandler(ChallengeHandler):
         return {"Authorization": f"Bearer {token_resp.registry_token}"}
 
 
-@dataclass
 class BasicChallengeHandler(ChallengeHandler):
     scheme = ChallengeScheme.Basic
 
@@ -182,21 +183,36 @@ class BasicChallengeHandler(ChallengeHandler):
 
 @dataclass
 class LayerResp:
-    mediaType: str
+    mediaType: ImageMediaType
     size: int
     digest: Digest
+    platform: Optional[Platform] = None
 
     def __post_init__(self):
         self.digest = Digest(self.digest)
 
 
-@dataclass
-class ManifestsResp:
+class ManifestsResp(BaseModel):
     schemaVersion: int
-    mediaType: str
+    mediaType: ImageMediaType
     config: LayerResp
     layers: List[LayerResp]
 
-    def __post_init__(self):
-        self.config = LayerResp(**self.config)
-        self.layers = [LayerResp(**one) for one in self.layers]
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class ManifestsListResp(BaseModel):
+    manifests: List[LayerResp]
+    mediaType: ImageMediaType
+    schemaVersion: str
+
+    def filter(self, target_platform: Platform) -> Digest:
+        """sample filter"""
+        for manifest in self.manifests:
+            if manifest.platform == target_platform:
+                target_manifest = manifest
+                break
+        else:
+            raise Exception("Not Found Matching image")
+        return target_manifest.digest
