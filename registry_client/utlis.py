@@ -17,7 +17,7 @@ from registry_client.platforms import Platform
 
 IMAGE_DEFAULT_TAG: str = "latest"
 DEFAULT_REPO: str = "library"
-DEFAULT_REGISTRY_HOST: str = "registry.docker.io"
+DEFAULT_REGISTRY_HOST: str = "registry-1.docker.io"
 DEFAULT_CLIENT_ID = "registry-python-client"
 
 ScopeType = Union["RegistryScope", "RepositoryScope"]
@@ -128,8 +128,8 @@ class PingResp:
 
 class ChallengeHandler(BaseModel):
     ping_resp: PingResp
-    username: str
-    password: str
+    username: Optional[str]
+    password: Optional[str]
     scope: ScopeType
     client_id: str = DEFAULT_CLIENT_ID
     scheme: ChallengeScheme = Field(default=None)

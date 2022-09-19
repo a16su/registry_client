@@ -35,8 +35,31 @@ class ImagePullOptions:
 
 
 class Layer:
-    pass
+    def get_blob(self):
+        pass
+
+    def push_blob(self):
+        pass
 
 
 class Image:
-    pass
+
+    def pull(self):
+        pass
+
+    def push(self):
+        pass
+
+    def get_tags(self):
+        pass
+
+    def get_manifest(self):
+        pass
+
+    def put_manifest(self):
+        pass
+
+    def delete_manifest(self):
+        pass
+
+

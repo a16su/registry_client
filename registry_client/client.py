@@ -36,12 +36,12 @@ logger.add("./client.log", level="INFO")
 
 class ImageClient:
     def __init__(
-        self,
-        host: str,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        scheme: str = "https",
-        platform: Platform = Platform(),
+            self,
+            host: str,
+            username: Optional[str] = None,
+            password: Optional[str] = None,
+            scheme: str = "https",
+            platform: Platform = Platform(),
     ):
         self._host: str = host
         self._username: str = username
@@ -86,7 +86,7 @@ class ImageClient:
         ).get_auth_header()
 
     def _request(
-        self, suffix: str, scope: ScopeType, method: str, **kwargs
+            self, suffix: str, scope: ScopeType, method: str, **kwargs
     ) -> requests.Response:
         if not suffix.startswith("/"):
             suffix = f"/{suffix}"
@@ -109,7 +109,7 @@ class ImageClient:
         return self._request(suffix=suffix, scope=scope, method="GET").json()
 
     def _image_manifest(
-        self, method: str, image_path: str, reference: str, auth_info: Dict[str, str]
+            self, method: str, image_path: str, reference: str, auth_info: Dict[str, str]
     ) -> requests.Response:
         """
         fetch or check image manifest
@@ -147,14 +147,14 @@ class ImageClient:
         return ManifestsResp(**resp.json())
 
     def image_manifest_existed(
-        self, image_path: str, reference: str, auth_info
+            self, image_path: str, reference: str, auth_info
     ) -> requests.Response:
         resp = self._image_manifest("HEAD", image_path, reference, auth_info)
         logger.debug(f"{resp.status_code=},{resp.text=}")
         return resp
 
     def _pull_schema2_config(
-        self, url_base: str, digest: Digest, headers: Dict[str, str]
+            self, url_base: str, digest: Digest, headers: Dict[str, str]
     ) -> requests.Response:
         url = f"{self._base_url}/v2/{url_base}/blobs/{digest}"
         resp = requests.get(url, headers=headers)
@@ -162,18 +162,18 @@ class ImageClient:
         return resp
 
     def _download_and_decompress_layer(
-        self,
-        base_url: str,
-        digest: Digest,
-        save_dir: pathlib.Path,
-        headers: Dict[str, str],
-        index: int,
+            self,
+            base_url: str,
+            digest: Digest,
+            save_dir: pathlib.Path,
+            headers: Dict[str, str],
+            index: int,
     ) -> pathlib.Path:
         url = f"{self._base_url}/v2/{base_url}/blobs/{digest}"
         tmp_file = save_dir.joinpath(f"layer_{index}.tar.gz")
         text = f"{digest.short}: "
         with requests.get(url, headers=headers, stream=True) as resp, open(
-            tmp_file, "wb"
+                tmp_file, "wb"
         ) as f, tqdm(
             unit="B",
             unit_scale=True,
@@ -197,17 +197,17 @@ class ImageClient:
         return save_dir.joinpath(digest.hex, "layer.tar")
 
     def pull_image(
-        self,
-        image_name: str,
-        repo_name: str = DEFAULT_REPO,
-        reference: str = IMAGE_DEFAULT_TAG,
-        save_dir: Union[pathlib.Path, str] = None,
-        check_layer: bool = False,
+            self,
+            image_name: str,
+            repo_name: str = DEFAULT_REPO,
+            reference: str = IMAGE_DEFAULT_TAG,
+            save_dir: Union[pathlib.Path, str] = None,
+            check_layer: bool = False,
     ):
         save_dir = pathlib.Path(save_dir or ".").absolute()
+        save_dir.mkdir(exist_ok=True)
         if not save_dir.is_dir():
             raise Exception(f"save dir {save_dir} not exists")
-        save_dir.mkdir(exist_ok=True)
 
         image_name_with_repo = f"{repo_name}/{image_name}"
         scope = RepositoryScope(repo_name=image_name_with_repo, actions=["pull"])
@@ -231,7 +231,7 @@ class ImageClient:
         image_save_dir.mkdir(parents=True, exist_ok=True)
         config_digest = Digest.from_bytes(image_config.content)
         with open(
-            image_save_dir.joinpath(f"{config_digest.hex}.json"), "w", encoding="utf-8"
+                image_save_dir.joinpath(f"{config_digest.hex}.json"), "w", encoding="utf-8"
         ) as f:
             json.dump(image_config.json(), f)
         with open(image_save_dir.joinpath("VERSION"), "w") as f:
@@ -274,17 +274,7 @@ class ImageClient:
 
 
 if __name__ == "__main__":
-    from tomlkit import parse
-
-    with open(
-            pathlib.Path(".").absolute().parent.joinpath("registry_info.toml"),
-            "r",
-            encoding="utf-8",
-    ) as f:
-        info = parse(f.read())
-    img_name = "hello-world"
-    repo = "library"
-    ref = "latest"
-
-    c = ImageClient(**info.get("docker-official"))
-    c.pull_image(image_name=img_name, repo_name=repo, reference=ref, check_layer=False)
+    client = ImageClient(host="registry-1.docker.io")
+    client.pull_image(image_name="hello-world",
+                      repo_name="library", reference="latest",
+                      save_dir=pathlib.Path("/tmp/image_save_dir"))
