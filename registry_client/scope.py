@@ -3,6 +3,7 @@
 # create at: 2022/9/24-下午6:46
 
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
@@ -19,7 +20,7 @@ class EmptyScope(Scope):
 @dataclass
 class RepositoryScope(Scope):
     repo_name: str
-    actions: list[str]
+    actions: List[str]
     class_name: str = ""
 
     def __str__(self) -> str:
@@ -32,7 +33,7 @@ class RepositoryScope(Scope):
 @dataclass
 class RegistryScope(Scope):
     rs_name: str
-    actions: list[str]
+    actions: List[str]
 
     def __str__(self) -> str:
         return f"registry:{self.rs_name}:{','.join(self.actions)}"

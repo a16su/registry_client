@@ -1,8 +1,8 @@
 import platform
+from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, validator
-from enum import Enum
+from pydantic import BaseModel
 
 DEFAULT_SYSTEM = platform.system().lower()
 DEFAULT_MACHINE = platform.machine().lower()

@@ -105,7 +105,7 @@ class Image:
     def _tar_layers(
             self,
             image_config: requests.Response,
-            layers_file_list: list[pathlib.Path],
+            layers_file_list: List[pathlib.Path],
             layers_dir: pathlib.Path,
             options: ImagePullOptions,
     ):
