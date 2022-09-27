@@ -27,7 +27,6 @@ def encode_auth(username: str, password: str) -> str:
 
 
 class Token:
-
     @property
     def expired(self) -> bool:
         return False
@@ -38,7 +37,6 @@ class Token:
 
 
 class EmptyToken(Token):
-
     @property
     def token(self) -> Dict[str, str]:
         return {}
@@ -108,5 +106,5 @@ class Auther:
             return BearerToken(resp)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     datetime.datetime.now().isoformat()

@@ -15,9 +15,9 @@ HeaderType = Dict[str, str]
 
 
 class Registry:
-
-    def __init__(self, client: "RegistryClient", host: str, username: str = "", password: str = "",
-                 name: Optional[str] = None):
+    def __init__(
+        self, client: "RegistryClient", host: str, username: str = "", password: str = "", name: Optional[str] = None
+    ):
         self.name = name or f"{host}-{username}"
         host = urllib.parse.urlparse(host)
         self._scheme = host.scheme
@@ -62,8 +62,8 @@ class Registry:
         self._auth_cache[str(scope)] = token
         return token
 
-    def image(self, repo, image, tag) -> Image:
-        return Image(f"{repo}/{image}", tag, self)
+    def image(self, repo: str, image: str) -> Image:
+        return Image(f"{repo}/{image}", self)
 
     def get_repositories(self):
         pass
