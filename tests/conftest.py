@@ -14,18 +14,16 @@ class BaseConfig:
     host: str = ""
     username: str = ""
     password: str = ""
-    scheme: str = "https"
 
 
 @dataclass
 class DockerOfficialConfig(BaseConfig):
-    host: str = "registry-1.docker.io"
+    host: str = "https://registry-1.docker.io"
 
 
 @dataclass
 class DockerMirrorConfig(BaseConfig):
-    host: str = "hub-mirror.c.163.com"
-    scheme: str = "http"
+    host: str = "http://hub-mirror.c.163.com"
 
 
 @dataclass
