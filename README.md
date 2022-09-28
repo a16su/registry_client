@@ -4,42 +4,67 @@ based on [docker-registry-api](https://docs.docker.com/registry/spec/api/#detail
 
 ### example
 
-#### pull docker-hub image
+#### 1. create a client
 
 ```python
-import pathlib
-from registry_client.client import ImageClient
+from registry_client.client import RegistryClient
 
-client = ImageClient(host="registry-1.docker.io")
-client.pull_image(image_name="hello-world",
-                  repo_name="library", reference="latest",
-                  save_dir=pathlib.Path("/tmp/image_save_dir"))
+client = RegistryClient()
 ```
 
-![run_result](docs/images/sample_run.png)
-
-#### pull docker registry mirror image
+#### 2. create a registry
 
 ```python
-from registry_client.client import ImageClient
-
-client = ImageClient(host="hub-mirror.c.163.com",
-                     scheme="http")
-client.pull_image(image_name="hello-world",
-                  repo_name="library", reference="latest")
+registry = client.registry(
+    host="https://registry-1.docker.io", name="docker-registry"
+)
 ```
 
-#### pull harbor registry image
+#### registry
+
+- ##### ping
+    ```python
+    ping_result = registry.ping()
+    print(ping_result.json())
+    # {'errors': [{'code': 'UNAUTHORIZED',
+    #   'message': 'authentication required',
+    #   'detail': None}]}
+    ```
+
+#### image
 
 ```python
-from registry_client.client import ImageClient
-
-harbor_ip = "127.0.0.1:8081"
-harbor_username = "admin"
-harbor_password = "Harbor12345"
-
-client = ImageClient(host=harbor_ip, username=harbor_username,
-                     password=harbor_password, scheme="https")
-client.pull_image(image_name="hello-world",
-                  repo_name="library", reference="latest")
+image = registry.image("library/hello-world")
 ```
+
+- ##### list tags
+
+    ```python
+    tags = image.get_tags()
+    print(tags)
+    # ['latest',
+    # 'linux',
+    # 'nanoserver',
+    # 'nanoserver-1709',
+    # 'nanoserver-1803',
+    # 'nanoserver-1809',
+    # 'nanoserver-ltsc2022',
+    # 'nanoserver-sac2016',
+    # 'nanoserver1709']
+    ```
+- ##### check tag
+  ```python
+    image.exist("latest")  # Digest("sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4")
+    image.exist("error_tag")  # False
+  ```
+- ##### pull
+  ```python
+  pull_options = ImagePullOptions(
+    save_dir= pathlib.Path("/tmp/image_save"), reference="latest"
+  )
+  image = registry.image("hello-world")
+  save_path = image.pull(pull_options)
+  print(save_path)  # PosixPath('/tmp/image_save/library_hello-world.tar')
+  # 
+  ```
+  ![pull_image](docs/images/pull_image.png)
