@@ -1,51 +1,62 @@
-from dataclasses import dataclass, asdict
-
 import pytest
+from loguru import logger
+
+from registry_client.client import RegistryClient
+from registry_client.registry import Registry
+from tests.docker_hub_client import DockerHubClient
 
 
-def pytest_configure(config):
-    config.addinivalue_line("markers", "official: mark docker official registry test")
-    config.addinivalue_line("markers", "mirror: mark docker mirror registry test")
-    config.addinivalue_line("markers", "harbor: mark custom harbor registry test")
-
-
-@dataclass
-class BaseConfig:
-    host: str = ""
-    username: str = ""
-    password: str = ""
-
-
-@dataclass
-class DockerOfficialConfig(BaseConfig):
-    host: str = "https://registry-1.docker.io"
-
-
-@dataclass
-class DockerMirrorConfig(BaseConfig):
-    host: str = "http://hub-mirror.c.163.com"
-
-
-@dataclass
-class HarborMirrorConfig(BaseConfig):
-    host: str = ""
-    scheme: str = "http"
+def pytest_addoption(parser: pytest.Parser) -> None:
+    group = parser.getgroup("registry_client")
+    group.addoption(
+        "--registry-host",
+        action="store",
+        default="https://registry-1.docker.io",
+        dest="registry_host",
+        help="the docker registry host for test",
+    )
+    group.addoption(
+        "--registry-username",
+        action="store",
+        default="",
+        dest="registry_username",
+        help="the docker registry username for test",
+    )
+    group.addoption(
+        "--registry-password",
+        action="store",
+        default="",
+        dest="registry_password",
+        help="the docker registry password for test",
+    )
+    group.addoption(
+        "--registry-ignore-certificate-errors",
+        action="store_true",
+        default=False,
+        dest="ignore-certificate-errors",
+        help="ignore registry certificate errors",
+    )
 
 
 @pytest.fixture(scope="session")
-def docker_official_config():
-    return asdict(DockerOfficialConfig())
+def docker_registry_client():
+    return RegistryClient()
 
 
 @pytest.fixture(scope="session")
-def docker_mirror_config():
-    return asdict(DockerMirrorConfig())
+def docker_registry(pytestconfig: pytest.Config, docker_registry_client) -> Registry:
+    host = pytestconfig.option.registry_host
+    username = pytestconfig.option.registry_username
+    password = pytestconfig.option.registry_password
+    logger.info(f"host: {host}, username: {username}, password: {password}")
+    return docker_registry_client.registry(host=host, username=username, password=password)
 
 
 @pytest.fixture(scope="session")
-def harbor_config():
-    return asdict(HarborMirrorConfig())
+def docker_hub_client() -> DockerHubClient:
+    return DockerHubClient()
 
 
-if __name__ == "__main__":
-    print(HarborMirrorConfig().host)
+@pytest.fixture(scope="function")
+def docker_image(docker_registry):
+    return docker_registry.image

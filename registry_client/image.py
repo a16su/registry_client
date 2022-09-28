@@ -5,7 +5,7 @@ import pathlib
 import tempfile
 from dataclasses import field, dataclass
 from enum import Enum
-from typing import List, Union
+from typing import List, Union, Optional
 
 import requests
 from loguru import logger
@@ -30,7 +30,7 @@ class ImageFormat(Enum):
 @dataclass
 class ImagePullOptions:
     save_dir: pathlib.Path
-    reference: str
+    reference: str = "latest"
     image_format: ImageFormat = field(default=ImageFormat.V2)
     platform: Platform = field(default_factory=Platform)
     compression: bool = False
@@ -64,6 +64,10 @@ class Layer:
                 return target
         save_file.rename(target)
         return target
+
+    def delete(self):
+        url = self.image._build_url(f"blobs/{self.digest}")
+        resp = requests.delete(url, headers=self.client.headers)
 
     def push_blob(self):
         pass
@@ -103,11 +107,11 @@ class Image:
         return tar_file
 
     def _tar_layers(
-            self,
-            image_config: requests.Response,
-            layers_file_list: List[pathlib.Path],
-            layers_dir: pathlib.Path,
-            options: ImagePullOptions,
+        self,
+        image_config: requests.Response,
+        layers_file_list: List[pathlib.Path],
+        layers_dir: pathlib.Path,
+        options: ImagePullOptions,
     ):
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
@@ -160,16 +164,24 @@ class Image:
     def push(cls, image_path: pathlib.Path):
         assert image_path.exists() and image_path.is_file()
 
-    def get_tags(self) -> List[str]:
+    def get_tags(self, limit: Optional[int] = None, last: Optional[str] = None) -> List[str]:
         scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
-        resp = self._send_req_with_scope("tags/list", scope, "GET")
-        if resp.status_code == 404:
+        params = {}
+        if limit:
+            params["n"] = limit
+        if last:
+            params["last"] = last
+        resp = self._send_req_with_scope("tags/list", scope, "GET", params=params)
+        if resp.status_code in [401, 404]:
             raise ImageNotFoundError(self.name)
+        resp.raise_for_status()
         return resp.json().get("tags", [])
 
     def exist(self, ref: str) -> Union[bool, Digest]:
         scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
         resp = self._send_req_with_scope(f"manifests/{ref}", scope, "HEAD")
+        logger.info(resp.text)
+        logger.info(resp.headers)
         if resp.status_code != 200:
             return False
         logger.debug(resp.headers)

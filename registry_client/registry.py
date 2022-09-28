@@ -62,17 +62,8 @@ class Registry:
         self._auth_cache[str(scope)] = token
         return token
 
-    def image(self, repo: str, image: str) -> Image:
-        return Image(f"{repo}/{image}", self)
+    def image(self, image: str) -> Image:
+        return Image(image, self)
 
     def get_repositories(self):
-        pass
-
-    def pull_image(self):
-        pass
-
-    def push_image(self):
-        pass
-
-    def list_image(self) -> List[Image]:
         pass
