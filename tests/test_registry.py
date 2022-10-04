@@ -7,12 +7,12 @@ from registry_client.client import DEFAULT_REGISTRY_HOST
 
 
 class TestRegistry:
-    @pytest.skip("not done")
+    @pytest.mark.skipif("not config.option.registry_username")
     def test_catalog(self, docker_registry):
         catalog = docker_registry.get_repositories()
         assert catalog
 
-    @pytest.skip("not done")
+    @pytest.mark.skipif("not config.option.registry_username")
     def test_catalog_pagination(self, docker_registry):
         full_catalog = docker_registry.get_repositories()
 

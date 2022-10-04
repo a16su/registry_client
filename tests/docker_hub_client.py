@@ -18,6 +18,10 @@ class DockerHubClient:
         resp = requests.get(f"{self.host}{uri}", params=params)
         return [one["name"] for one in resp.json()["results"]]
 
+    def login(self):
+        # TODO
+        pass
+
 
 if __name__ == "__main__":
     client = DockerHubClient()
