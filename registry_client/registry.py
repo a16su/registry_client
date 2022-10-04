@@ -2,14 +2,14 @@
 # encoding : utf-8
 # create at: 2022/9/19-下午6:18
 import urllib.parse
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Union
 
 import requests
 from loguru import logger
 
 from registry_client.auth import Auther, Token, EmptyToken
 from registry_client.image import Image
-from registry_client.scope import Scope
+from registry_client.scope import Scope, RegistryScope
 
 HeaderType = Dict[str, str]
 
@@ -65,5 +65,14 @@ class Registry:
     def image(self, image: str) -> Image:
         return Image(image, self)
 
-    def get_repositories(self):
-        pass
+    def get_repositories(self, count: Optional[int] = None, last: Optional[Union[str, Image]] = None) -> List[Image]:
+        url = f"{self._base_url}/v2/_catalog"
+        scop = RegistryScope("catalog", actions=["*"])
+        token = self.auth_with_scope(scop)
+        params = {
+            "n": count or "",
+        }
+        if last:
+            params["last"] = str(last)
+        resp = self.client._get(url=url, headers=token.token, params=params)
+        return [self.image(image=image_name) for image_name in resp.json()["repositories"]]

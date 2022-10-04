@@ -2,6 +2,13 @@
 
 based on [docker-registry-api](https://docs.docker.com/registry/spec/api/#detail)
 
+#### TODO
+
+- cli
+- more image format
+- stream transport
+- ctx manager
+
 ### example
 
 #### 1. create a client

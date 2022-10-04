@@ -4,7 +4,7 @@ import uuid
 import pytest
 
 from registry_client.image import ImagePullOptions
-from registry_client.errors import ImageNotFoundError, ImageManifestCheckError
+from registry_client.errors import ImageNotFoundError
 
 
 class TestImage:
@@ -51,3 +51,22 @@ class TestImage:
         image = docker_image(f"library/hello-world1")
         with pytest.raises(ImageNotFoundError):
             print(image.get_tags())
+
+    @pytest.mark.parametrize(
+        ("registry_name", "name", "result"),
+        (
+            ("docker-official", "library/hello-world", True),
+            ("docker-official", "hello-world", True),
+            ("docker-official", "hello-wold", False),
+            ("docker-official", "1ibrary/hello-wo-rld", False),
+            ("docker-officia", "hello-world", False),
+            ("docker-officia", "library/hello-world", False),
+            ("docker-officia", "librar-y/hello-wo-rld", False),
+        ),
+    )
+    def test_eq(self, docker_registry_client, registry_name: str, name: str, result: bool):
+        default_registry = docker_registry_client.registry(name="docker-official")
+        default_image = default_registry.image("library/hello-world")
+        new_registry = docker_registry_client.registry(name=registry_name)
+        new_image = new_registry.image(name)
+        assert (default_image == new_image) == result

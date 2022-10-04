@@ -29,8 +29,11 @@ class RegistryClient(requests.Session):
     def _head(self, url: str, **kwargs) -> requests.Response:
         return self.head(url, **kwargs)
 
-    def registry(self, host: str = DEFAULT_REGISTRY_HOST, username: str = "", password: str = "",
-                 name: Optional[str] = None) -> Registry:
+    def registry(
+        self, host: str = DEFAULT_REGISTRY_HOST, username: str = "", password: str = "", name: Optional[str] = None
+    ) -> Registry:
+        if not host:
+            host = DEFAULT_REGISTRY_HOST
         reg = Registry(client=self, host=host, username=username, password=password, name=name)
         self._registries[reg.name] = reg
         return reg

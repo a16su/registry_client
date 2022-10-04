@@ -72,6 +72,11 @@ class Layer:
     def push_blob(self):
         pass
 
+    def head(self) -> bool:
+        url = self.image._build_url(f"blobs/{self.digest}")
+        resp = requests.head(url, headers=self.client.headers)
+        return resp.status_code == 200
+
 
 class Image:
     def __init__(self, name: str, registry: "Registry"):
@@ -84,7 +89,17 @@ class Image:
         self._name_with_repo = f"{self.repo}/{self.name}"
         self.registry = registry
         self.client = registry.client
-        self._update_header(accept="application/vnd.docker.distribution.manifest.v2+json")
+
+    def __str__(self):
+        return self._name_with_repo
+
+    def __eq__(self, other: "Image"):
+        return self.registry.name == other.registry.name and self._name_with_repo == other._name_with_repo
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    __repr__ = __str__
 
     def _set_auth_header(self, scope: Scope):
         self._update_header(**self.registry.auth_with_scope(scope).token)
@@ -135,6 +150,7 @@ class Image:
             return image_save_path
 
     def pull(self, options: ImagePullOptions) -> pathlib.Path:
+        self._update_header(accept="application/vnd.docker.distribution.manifest.v2+json")
         if not options.save_dir.exists():
             options.save_dir.mkdir(parents=True)
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
@@ -161,7 +177,7 @@ class Image:
         return image_path
 
     @classmethod
-    def push(cls, image_path: pathlib.Path):
+    def push(cls, image_path: pathlib.Path, force=False):
         assert image_path.exists() and image_path.is_file()
 
     def get_tags(self, limit: Optional[int] = None, last: Optional[str] = None) -> List[str]:

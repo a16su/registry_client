@@ -33,14 +33,27 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--registry-ignore-certificate-errors",
         action="store_true",
         default=False,
-        dest="ignore-certificate-errors",
+        dest="ignore_certificate_errors",
         help="ignore registry certificate errors",
+    )
+    group.addoption(
+        "--registry-proxy", action="store", default="", dest="registry_proxy", help="the proxy used to connect registry"
     )
 
 
 @pytest.fixture(scope="session")
-def docker_registry_client():
-    return RegistryClient()
+def docker_registry_client(pytestconfig: pytest.Config):
+    ignore_cert_errors = not pytestconfig.option.ignore_certificate_errors
+    proxy = pytestconfig.option.registry_proxy or None
+    if proxy:
+        schema = "http"
+        temp = proxy.split("://")
+        if len(temp) == 2:
+            schema, address = temp
+        else:
+            address = temp[-1]
+        proxy = {schema: address}
+    return RegistryClient(proxy=proxy, verify=ignore_cert_errors)
 
 
 @pytest.fixture(scope="session")
