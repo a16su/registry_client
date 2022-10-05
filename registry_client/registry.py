@@ -16,7 +16,8 @@ HeaderType = Dict[str, str]
 
 class Registry:
     def __init__(
-        self, client: "RegistryClient", host: str, username: str = "", password: str = "", name: Optional[str] = None
+            self, client: "RegistryClient", host: str, username: str = "", password: str = "",
+            name: Optional[str] = None
     ):
         self.name = name or f"{host}-{username}"
         host = urllib.parse.urlparse(host)
@@ -27,6 +28,12 @@ class Registry:
         self.client = client
         self._auth_config: Optional[Auther] = None
         self._auth_cache: Dict[str, Token] = {}
+
+    def __eq__(self, other):
+        return self.name == other.name
+
+    def __ne__(self, other):
+        return not self == other
 
     @property
     def _base_url(self):

@@ -22,12 +22,12 @@ class TestRegistry:
     @pytest.mark.parametrize(
         "host, username, custom, expect",
         (
-                (DEFAULT_REGISTRY_HOST, "", "", f"{DEFAULT_REGISTRY_HOST}-"),
-                ("", "", "", f"{DEFAULT_REGISTRY_HOST}-"),
-                (DEFAULT_REGISTRY_HOST, "username", "", f"{DEFAULT_REGISTRY_HOST}-username"),
-                (DEFAULT_REGISTRY_HOST, "username", "custom", "custom"),
-                (DEFAULT_REGISTRY_HOST, "", "custom", "custom"),
-                ("", "", "custom", "custom"),
+            (DEFAULT_REGISTRY_HOST, "", "", f"{DEFAULT_REGISTRY_HOST}-"),
+            ("", "", "", f"{DEFAULT_REGISTRY_HOST}-"),
+            (DEFAULT_REGISTRY_HOST, "username", "", f"{DEFAULT_REGISTRY_HOST}-username"),
+            (DEFAULT_REGISTRY_HOST, "username", "custom", "custom"),
+            (DEFAULT_REGISTRY_HOST, "", "custom", "custom"),
+            ("", "", "custom", "custom"),
         ),
     )
     def test_name(self, docker_registry_client, host, username, custom, expect):

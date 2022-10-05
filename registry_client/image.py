@@ -83,18 +83,23 @@ class Image:
         if "/" in name:
             repo, name = name.split("/")
         else:
-            repo = "library"
+            repo = DEFAULT_REPO
         self.repo = repo
         self.name = name
         self._name_with_repo = f"{self.repo}/{self.name}"
         self.registry = registry
         self.client = registry.client
 
+    def repo_tag(self, reference: str):
+        if self.repo == DEFAULT_REPO:
+            return f"{self.name}:{reference}"
+        return f"{self.repo}/{self.name}:{reference}"
+
     def __str__(self):
         return self._name_with_repo
 
     def __eq__(self, other: "Image"):
-        return self.registry.name == other.registry.name and self._name_with_repo == other._name_with_repo
+        return self.registry == other.registry and self._name_with_repo == other._name_with_repo
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -122,11 +127,11 @@ class Image:
         return tar_file
 
     def _tar_layers(
-        self,
-        image_config: requests.Response,
-        layers_file_list: List[pathlib.Path],
-        layers_dir: pathlib.Path,
-        options: ImagePullOptions,
+            self,
+            image_config: requests.Response,
+            layers_file_list: List[pathlib.Path],
+            layers_dir: pathlib.Path,
+            options: ImagePullOptions,
     ):
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
@@ -137,8 +142,10 @@ class Image:
             with open(layers_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
                 if self.registry._host == DEFAULT_REGISTRY_HOST and self.repo == DEFAULT_REPO:
                     repo_tags = [f"{self.name}:{options.reference}"]
+                elif Digest.is_digest(options.reference):
+                    repo_tags = []
                 else:
-                    repo_tags = [f"{self.registry._host}/{self.repo}/{self.name}:{options.reference}"]
+                    repo_tags = [f"{self.registry._host}/{self.repo_tag(options.reference)}"]
                 data = {
                     "Config": f"{image_config_digest.hex}.json",
                     "RepoTags": repo_tags,

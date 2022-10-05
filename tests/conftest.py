@@ -1,9 +1,13 @@
+import shutil
+
+import docker
 import pytest
 from loguru import logger
 
 from registry_client.client import RegistryClient
 from registry_client.registry import Registry
 from tests.docker_hub_client import DockerHubClient
+from tests.local_docker import LocalDockerChecker
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -73,3 +77,22 @@ def docker_hub_client() -> DockerHubClient:
 @pytest.fixture(scope="function")
 def docker_image(docker_registry):
     return docker_registry.image
+
+
+@pytest.fixture(scope="session")
+def local_docker():
+    return docker.from_env()
+
+
+@pytest.fixture(scope="function")
+def image_save_dir(tmp_path):
+    yield tmp_path
+    shutil.rmtree(tmp_path)
+
+
+@pytest.fixture(scope="function")
+def image_checker():
+    checker = LocalDockerChecker()
+    yield checker
+    if checker.image:
+        checker.image.remove(force=True)
