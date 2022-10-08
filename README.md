@@ -1,3 +1,4 @@
+[![Build Status](https://github.com/immortal-n/registry_client/actions/workflows/python-app.yml/badge.svg?branch=master)](https://github.com/immortal-n/registry_client/actions/workflows/python-app.yml/)
 ## undone...
 
 based on [docker-registry-api](https://docs.docker.com/registry/spec/api/#detail)
@@ -65,10 +66,17 @@ image = registry.image("library/hello-world")
     image.exist("error_tag")  # False
   ```
 - ##### pull
+  - by tag
   ```python
   pull_options = ImagePullOptions(
     save_dir= pathlib.Path("/tmp/image_save"), reference="latest"
   )
+  ```
+  - by digest
+  ```python
+  pull_options = ImagePullOptions(save_dir=pathlib.path("/tmp/image_save"), reference="sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4")
+  ```
+  ```python
   image = registry.image("hello-world")
   save_path = image.pull(pull_options)
   print(save_path)  # PosixPath('/tmp/image_save/library_hello-world.tar')

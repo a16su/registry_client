@@ -72,7 +72,7 @@ class BearerToken(Token):
 
 
 class Auther:
-    def __init__(self, auth_config_header: str):
+    def __init__(self, auth_config_header: Optional[str] = None):
         self._need_auth = True
         if auth_config_header is None:
             self._need_auth = False

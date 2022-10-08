@@ -14,7 +14,7 @@ DEFAULT_IMAGE_NAME = "library/hello-world"
 
 class TestImage:
     @staticmethod
-    def _check_pull_image(checker: LocalDockerChecker, image: Image, options: ImagePullOptions = None):
+    def _check_pull_image(checker: LocalDockerChecker, image: Image, options: ImagePullOptions):
         image_path = image.pull(options)
         assert image_path.exists() and image_path.is_file()
         save_dir = options.save_dir
@@ -31,18 +31,14 @@ class TestImage:
                 marks=pytest.mark.skip,
             ),
             (DEFAULT_IMAGE_NAME, {"reference": "linux"}),
-            pytest.param(
-                DEFAULT_IMAGE_NAME,
-                {"reference": "sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4"},
-                marks=pytest.mark.skip,
-            ),
-        ),
+            (DEFAULT_IMAGE_NAME, {"reference": "sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4"}),
+        )
     )
     def test_pull(self, docker_image, image_save_dir, image_name, options: Dict[str, Any], image_checker):
         options.update(save_dir=image_save_dir)
-        options = ImagePullOptions(**options)
+        pull_options = ImagePullOptions(**options)
         image = docker_image(image_name)
-        self._check_pull_image(image_checker, image, options)
+        self._check_pull_image(image_checker, image, pull_options)
 
     def test_pull_dont_exists_image(self, docker_image):
         image = docker_image(uuid.uuid1().hex[:8])

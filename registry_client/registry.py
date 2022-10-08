@@ -16,8 +16,7 @@ HeaderType = Dict[str, str]
 
 class Registry:
     def __init__(
-            self, client: "RegistryClient", host: str, username: str = "", password: str = "",
-            name: Optional[str] = None
+        self, client: "RegistryClient", host: str, username: str = "", password: str = "", name: Optional[str] = None
     ):
         self.name = name or f"{host}-{username}"
         host = urllib.parse.urlparse(host)

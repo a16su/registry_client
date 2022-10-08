@@ -91,6 +91,8 @@ class Image:
         self.client = registry.client
 
     def repo_tag(self, reference: str):
+        if Digest.is_digest(reference):
+            return None
         if self.repo == DEFAULT_REPO:
             return f"{self.name}:{reference}"
         return f"{self.repo}/{self.name}:{reference}"
@@ -127,11 +129,11 @@ class Image:
         return tar_file
 
     def _tar_layers(
-            self,
-            image_config: requests.Response,
-            layers_file_list: List[pathlib.Path],
-            layers_dir: pathlib.Path,
-            options: ImagePullOptions,
+        self,
+        image_config: requests.Response,
+        layers_file_list: List[pathlib.Path],
+        layers_dir: pathlib.Path,
+        options: ImagePullOptions,
     ):
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
@@ -140,10 +142,10 @@ class Image:
 
         if options.image_format == ImageFormat.V2:
             with open(layers_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
-                if self.registry._host == DEFAULT_REGISTRY_HOST and self.repo == DEFAULT_REPO:
-                    repo_tags = [f"{self.name}:{options.reference}"]
-                elif Digest.is_digest(options.reference):
+                if Digest.is_digest(options.reference):
                     repo_tags = []
+                elif self.registry._host == DEFAULT_REGISTRY_HOST and self.repo == DEFAULT_REPO:
+                    repo_tags = [f"{self.name}:{options.reference}"]
                 else:
                     repo_tags = [f"{self.registry._host}/{self.repo_tag(options.reference)}"]
                 data = {
