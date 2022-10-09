@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "image_client"
+name = "registry_client"
 version = "0.1.0"
-description = ""
+description = "Communicate with Docker Registry (docker hub, harbor) via Docker Registry V2 without docker"
 authors = ["Your Name <you@example.com>"]
 
 [tool.poetry.dependencies]
@@ -17,9 +17,14 @@ tomlkit = "^0.11.4"
 pytest = "^7.1.3"
 docker = "^6.0.0"
 pytest-cov = "^4.0.0"
+black = "^22.10.0"
 
 [tool.black]
 line = 120
+
+[tool.isort]
+profile = "black"
+src_paths = ["registry_client", "tests"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
