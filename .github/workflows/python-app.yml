@@ -14,21 +14,23 @@ permissions:
 
 jobs:
   test:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python_version: ["3.7", "3.8", "3.9", "3.10"]
-
     steps:
-    - name: Poetry setup
-      uses: ClementWalter/poetry-action@v1
+#     - name: install poetry
+#       run: python -m pip install -U pip
+#            pip install poetry
+    - name: Setup Python
+      uses: actions/setup-python@v4.2.0
       with:
-        # 
-        os: ubuntu-latest
-        # 
         python-version: ${{matrix.python_version}}
-    - name: lint
-      run: poetry run black --check --diff --color -l 120
-    - name: run tests
-      run: potry run pytest tests
+        cache: "poetry"
+    - name: install poetry
+      run: python -m pip install -U pip
+           pip install poetry
+    - name: install dep
+      run: poetry install
+    - name: test
+      run: poetry run pytest tests
