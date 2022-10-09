@@ -3,21 +3,21 @@
 import json
 import pathlib
 import tempfile
-from dataclasses import field, dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Union, Optional
+from typing import List, Optional, Union
 
 import requests
 from loguru import logger
 from tqdm import tqdm
 
 from registry_client.digest import Digest
-from registry_client.errors import ImageNotFoundError, ImageManifestCheckError
-from registry_client.export import GZipDeCompress, GZIP_MAGIC, TarImageDir
+from registry_client.errors import ImageManifestCheckError, ImageNotFoundError
+from registry_client.export import GZIP_MAGIC, GZipDeCompress, TarImageDir
 from registry_client.manifest import ManifestsHandler, ManifestsListHandler
 from registry_client.media_types import ImageMediaType
 from registry_client.platforms import Platform
-from registry_client.scope import Scope, RepositoryScope
+from registry_client.scope import RepositoryScope, Scope
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 
 

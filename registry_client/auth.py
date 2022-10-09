@@ -4,7 +4,7 @@
 import base64
 import datetime
 from enum import Enum
-from typing import Optional, Dict
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 import iso8601

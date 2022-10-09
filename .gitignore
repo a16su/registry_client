@@ -5,3 +5,5 @@ __pycache__
 *.log
 .mypy_cache
 .pytest_cache
+.tox
+dist

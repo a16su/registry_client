@@ -1,8 +1,8 @@
 import hashlib
 import re
-from enum import Enum
-from typing import Callable, Union, Any
 from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Callable, Union
 
 DIGEST_REGEX = re.compile(r"sha(256|384|512):[a-z0-9]{64}")
 

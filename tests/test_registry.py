@@ -3,9 +3,9 @@
 # create at: 2022/10/4-下午10:50
 import pytest
 
+from registry_client.auth import Auther, EmptyToken
 from registry_client.client import DEFAULT_REGISTRY_HOST
 from registry_client.scope import EmptyScope, RegistryScope, RepositoryScope
-from registry_client.auth import Auther, EmptyToken
 
 
 class TestRegistry:

@@ -2,7 +2,7 @@
 # encoding : utf-8
 # create at: 2022/10/5-下午5:36
 import pathlib
-from typing import Dict, Any, Optional
+from typing import Optional
 
 import docker
 from docker.models.images import Image

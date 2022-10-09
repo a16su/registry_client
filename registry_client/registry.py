@@ -2,14 +2,14 @@
 # encoding : utf-8
 # create at: 2022/9/19-下午6:18
 import urllib.parse
-from typing import List, Optional, Dict, Union
+from typing import Dict, List, Optional, Union
 
 import requests
 from loguru import logger
 
-from registry_client.auth import Auther, Token, EmptyToken
+from registry_client.auth import Auther, EmptyToken, Token
 from registry_client.image import Image
-from registry_client.scope import Scope, RegistryScope
+from registry_client.scope import RegistryScope, Scope
 
 HeaderType = Dict[str, str]
 

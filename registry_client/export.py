@@ -1,6 +1,6 @@
+import gzip
 import os
 import pathlib
-import gzip
 import tarfile
 
 from loguru import logger

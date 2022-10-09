@@ -4,9 +4,9 @@ from typing import Any, Dict
 
 import pytest
 
-from registry_client.image import ImagePullOptions, Image
 from registry_client.errors import ImageNotFoundError
-from registry_client.platforms import Platform, OS, Arch
+from registry_client.image import Image, ImagePullOptions
+from registry_client.platforms import OS, Arch, Platform
 from tests.local_docker import LocalDockerChecker
 
 DEFAULT_IMAGE_NAME = "library/hello-world"
@@ -31,8 +31,11 @@ class TestImage:
                 marks=pytest.mark.skip,
             ),
             (DEFAULT_IMAGE_NAME, {"reference": "linux"}),
-            (DEFAULT_IMAGE_NAME, {"reference": "sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4"}),
-        )
+            (
+                DEFAULT_IMAGE_NAME,
+                {"reference": "sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4"},
+            ),
+        ),
     )
     def test_pull(self, docker_image, image_save_dir, image_name, options: Dict[str, Any], image_checker):
         options.update(save_dir=image_save_dir)

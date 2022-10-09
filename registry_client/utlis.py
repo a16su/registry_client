@@ -1,5 +1,4 @@
 import hashlib
-
 from typing import List
 
 IMAGE_DEFAULT_TAG: str = "latest"

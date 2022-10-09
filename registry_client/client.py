@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/24-下午4:06
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 import requests
 
