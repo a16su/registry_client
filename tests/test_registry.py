@@ -5,7 +5,10 @@ import pytest
 
 from registry_client.auth import Auther, EmptyToken
 from registry_client.client import DEFAULT_REGISTRY_HOST
+from registry_client.digest import Digest
+from registry_client.reference import Reference, TagReference, Repository, DigestReference
 from registry_client.scope import EmptyScope, RegistryScope, RepositoryScope
+from registry_client.utlis import parse_normalized_named
 
 
 class TestRegistry:
@@ -55,3 +58,35 @@ class TestRegistry:
     def test_build_url(self, docker_registry, path: str):
         get = docker_registry.build_url(path)
         assert get == f"{docker_registry._base_url}/path"
+
+
+@pytest.mark.parametrize(
+    "name, want",
+    (
+        ("hello-world", Reference(repository=Repository("registry-1.docker.io", path="library/hello-world"))),
+        ("repo/hello-world", Reference(repository=Repository("registry-1.docker.io", path="repo/hello-world"))),
+        ("a.com/repo/hello-world", Reference(repository=Repository("a.com", path="repo/hello-world"))),
+        ("a.com:8080/repo/hello-world", Reference(repository=Repository("a.com:8080", path="repo/hello-world"))),
+        ("19.1.41.1/repo/hello-world", Reference(repository=Repository("19.1.41.1", path="repo/hello-world"))),
+        (
+            "19.1.41.1:8080/repo/hello-world",
+            Reference(repository=Repository("19.1.41.1:8080", path="repo/hello-world")),
+        ),
+        (
+            "19.1.41.1/repo/hello-world:latest",
+            TagReference(repository=Repository("19.1.41.1", path="repo/hello-world"), tag="latest"),
+        ),
+        (
+            f"19.1.41.1/repo/hello-world@sha256:{'1' * 64}",
+            DigestReference(
+                repository=Repository("19.1.41.1", path="repo/hello-world"), digest=Digest(f"sha256:{'1' * 64}")
+            ),
+        ),
+    ),
+)
+def test_parse_normalized_named(name: str, want):
+    ref = parse_normalized_named(name)
+    assert type(ref) == type(want)
+    assert ref.repository.name() == want.repository.name()
+    if isinstance(want, (TagReference, DigestReference)):
+        assert str(ref) == str(want)
