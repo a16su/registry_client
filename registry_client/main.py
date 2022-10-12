@@ -86,10 +86,29 @@ def pull_image(
     ),
     image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
     save_to: pathlib.Path = Option(..., help="save image to which dir"),
+    just_download: bool = Option(False, help="just download image config and layer, don't tar them to image"),
 ):
     want_platform: Optional[Platform] = platform
     if save_to.exists() and not save_to.is_dir():
         raise BadParameter(f"param:save_to({save_to}) must be a directory")
+
+
+@app.command("tar")
+def tar_to_image(
+    image_dir: pathlib.Path = Option(..., "--image-dir", "-C", help="image config and layer dir"),
+    save_to: pathlib.Path = Option(..., "--output", "-o", help="save image to"),
+    image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
+    compress: bool = Option(False, "-z", help="compress image by gzip"),
+):
+    if not image_dir.exists():
+        raise BadParameter(f"{image_dir} doesn't exists")
+    if not image_dir.is_dir():
+        raise BadParameter(f"{image_dir} must be a directory")
+    if save_to.exists() and save_to.is_dir():
+        raise BadParameter(f"image outfile: {save_to} can't be a directory")
+    echo(f"will tar image_dir {image_dir} to image {save_to}, format is {image_format.value}")
+    image_dir = image_dir.absolute()
+    save_to = save_to.absolute()
 
 
 @app.callback()
