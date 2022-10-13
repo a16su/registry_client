@@ -35,7 +35,7 @@ def test_empty_token():
 
 
 def generate_resp(
-        token: str = None, access_token: str = None, expires_in: int = None, issued_at: datetime.datetime = None
+    token: str = None, access_token: str = None, expires_in: int = None, issued_at: datetime.datetime = None
 ):
     value = {
         "token": token or os.urandom(16).hex(),
@@ -50,10 +50,10 @@ class TestBearerToken:
     @pytest.mark.parametrize(
         "issued_at, expires_in, result",
         (
-                (None, TOKEN_CACHE_MIN_TIME - 1, True),
-                (None, TOKEN_CACHE_MIN_TIME + 1, False),
-                (None, TOKEN_CACHE_MIN_TIME, True),
-                (None, -1, True),
+            (None, TOKEN_CACHE_MIN_TIME - 1, True),
+            (None, TOKEN_CACHE_MIN_TIME + 1, False),
+            (None, TOKEN_CACHE_MIN_TIME, True),
+            (None, -1, True),
         ),
     )
     def test_expired(self, issued_at, expires_in, result):
@@ -85,8 +85,8 @@ class TestAuther:
     @pytest.mark.parametrize(
         "header, want_class",
         (
-                ('Basic realm="http://a.com",service="docker-auth"', BasicToken),
-                ('Bearer realm="http://a.com",service="docker-auth"', BearerToken),
+            ('Basic realm="http://a.com",service="docker-auth"', BasicToken),
+            ('Bearer realm="http://a.com",service="docker-auth"', BearerToken),
         ),
     )
     def test_auth_with_scope_return_type(self, monkeypatch, header, want_class):
