@@ -1,13 +1,27 @@
+import json
+import os
 import shutil
 
 import docker
 import pytest
+import requests
 from loguru import logger
 
 from registry_client.client import RegistryClient
+from registry_client.digest import Digest
 from registry_client.registry import Registry
 from tests.docker_hub_client import DockerHubClient
 from tests.local_docker import LocalDockerChecker
+
+
+class FakeResponse(requests.Response):
+    def set_content(self, value: str):
+        self._content = bytes(value.encode())
+        return self
+
+    def set_json(self, dict_value):
+        self.set_content(json.dumps(dict_value))
+        return self
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -65,8 +79,18 @@ def docker_registry(pytestconfig: pytest.Config, docker_registry_client) -> Regi
     host = pytestconfig.option.registry_host
     username = pytestconfig.option.registry_username
     password = pytestconfig.option.registry_password
-    logger.info(f"host: {host}, username: {username}, password: {password}")
-    return docker_registry_client.registry(host=host, username=username, password=password)
+    info_from_env = {
+        "host": os.environ.get("REGISTRY_HOST"),
+        "username": os.environ.get("REGISTRY_USERNAME"),
+        "password": os.environ.get("REGISTRY_PASSWORD"),
+    }
+    if host:
+        info_from_env["host"] = host
+    if username:
+        info_from_env["username"] = username
+    if password:
+        info_from_env["password"] = password
+    return docker_registry_client.registry(**info_from_env)
 
 
 @pytest.fixture(scope="session")
@@ -96,3 +120,13 @@ def image_checker():
     yield checker
     if checker.image:
         checker.image.remove(force=True)
+
+
+@pytest.fixture(scope="function")
+def random_digest():
+    return Digest.from_bytes(os.urandom(1))
+
+
+@pytest.fixture(scope="function")
+def fake_response() -> FakeResponse:
+    return FakeResponse()

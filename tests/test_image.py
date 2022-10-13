@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import pytest
 
+from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 from registry_client.errors import ImageNotFoundError
 from registry_client.image import Image, ImagePullOptions
 from registry_client.platforms import OS, Arch, Platform
@@ -25,11 +26,7 @@ class TestImage:
         "image_name, options",
         (
             (DEFAULT_IMAGE_NAME, {}),
-            pytest.param(
-                DEFAULT_IMAGE_NAME,
-                {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)},
-                marks=pytest.mark.skip,
-            ),
+            (DEFAULT_IMAGE_NAME, {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)}),
             (DEFAULT_IMAGE_NAME, {"reference": "linux"}),
             (
                 DEFAULT_IMAGE_NAME,
@@ -68,6 +65,7 @@ class TestImage:
         tags_by_http = docker_hub_client.list_tags(image_name)
         assert not set(tags_by_api) - set(tags_by_http)
 
+    @pytest.mark.skipif("'registry-1.docker.io' not in config.option.registry_host")
     def test_tags_paginated_last(self, docker_image):
         image = docker_image("library/python")
         tags = image.get_tags(limit=1)
@@ -77,8 +75,7 @@ class TestImage:
 
     def test_get_dont_exists_image_tags(self, docker_image):
         image = docker_image(f"library/hello-world1")
-        with pytest.raises(ImageNotFoundError):
-            print(image.get_tags())
+        assert image.get_tags() == []
 
     @pytest.mark.parametrize(
         ("registry_name", "name", "result"),
@@ -98,3 +95,25 @@ class TestImage:
         new_registry = docker_registry_client.registry(name=registry_name)
         new_image = new_registry.image(name)
         assert (default_image == new_image) == result
+
+    @pytest.mark.parametrize(
+        "host, image_name, ref, want",
+        (
+            (DEFAULT_REGISTRY_HOST, "foo", "latest", "foo:latest"),
+            (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}/foo", "latest", "foo:latest"),
+            (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}1/foo", "latest", f"{DEFAULT_REPO}1/foo:latest"),
+            ("a.com", "foo", "latest", "a.com/library/foo:latest"),
+            ("a.com", "library/foo", "latest", "a.com/library/foo:latest"),
+            ("a.com", "a/b/c/d/foo", "latest", "a.com/a/b/c/d/foo:latest"),
+            (DEFAULT_REGISTRY_HOST, "foo", "digest1", None),
+            (DEFAULT_REGISTRY_HOST, "library/foo", "digest2", None),
+            (DEFAULT_REGISTRY_HOST, "a/b/c/foo", "digest3", None),
+            ("a.com", "a/b/c/foo", "digest3", None),
+        ),
+    )
+    def test_image_repo_tag(self, docker_image, monkeypatch, random_digest, host, image_name, ref, want):
+        image = docker_image(image_name)
+        monkeypatch.setattr(image.registry, "_host", host)
+        if ref.startswith("digest"):
+            ref = random_digest.value
+        assert image.repo_tag(ref) == want
