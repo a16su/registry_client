@@ -2,6 +2,8 @@ import gzip
 import os
 import pathlib
 import tarfile
+import json
+from typing import List
 
 from loguru import logger
 
@@ -42,6 +44,27 @@ class TarImageDir:
     def do(self):
         with tarfile.open(self.target_path, "w") as tar_file:
             tar_file.add(self.src_dir, arcname=os.path.sep)
+
+
+class ImageV2Tar(TarImageDir):
+    def __init__(self, src_dir: pathlib.Path, target_path: pathlib.Path):
+        super(ImageV2Tar, self).__init__(src_dir, target_path)
+        image_config_path = src_dir.joinpath("manifest.json")
+        assert image_config_path.exists() and image_config_path.is_file()
+        with image_config_path.open("r") as f:
+            image_config = json.load(f)
+        self.layer_files: List[str] = image_config[0]["Layers"]
+
+    def do(self):
+        pass
+
+
+class OCIImageTar(TarImageDir):
+    """
+    Tar directory to oci foramt image
+    """
+
+    pass
 
 
 if __name__ == "__main__":

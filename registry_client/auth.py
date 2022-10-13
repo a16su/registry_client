@@ -68,7 +68,9 @@ class BearerToken(Token):
     @property
     def expired(self) -> bool:
         now = datetime.datetime.now(tz=self._expired_at.tzinfo)
-        return (self._expired_at - now).total_seconds() < TOKEN_CACHE_MIN_TIME
+        if now >= self._expired_at:
+            return True
+        return (self._expired_at - now).total_seconds() <= TOKEN_CACHE_MIN_TIME
 
 
 class Auther:
@@ -104,7 +106,3 @@ class Auther:
 
             resp = requests.get(self.realm, params=params, headers=auth_info, verify=verify)
             return BearerToken(resp)
-
-
-if __name__ == "__main__":
-    datetime.datetime.now().isoformat()

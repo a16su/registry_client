@@ -81,7 +81,7 @@ class Layer:
 class Image:
     def __init__(self, name: str, registry: "Registry"):
         if "/" in name:
-            repo, name = name.split("/")
+            repo, name = name.rsplit("/", 1)
         else:
             repo = DEFAULT_REPO
         self.repo = repo
@@ -91,11 +91,14 @@ class Image:
         self.client = registry.client
 
     def repo_tag(self, reference: str):
+        assert reference != ""
         if Digest.is_digest(reference):
             return None
-        if self.repo == DEFAULT_REPO:
-            return f"{self.name}:{reference}"
-        return f"{self.repo}/{self.name}:{reference}"
+        if self.registry._host == DEFAULT_REGISTRY_HOST:
+            if self.repo == DEFAULT_REPO:
+                return f"{self.name}:{reference}"
+            return f"{self.repo}/{self.name}:{reference}"
+        return f"{self.registry._host}/{self.repo}/{self.name}:{reference}"
 
     def __str__(self):
         return self._name_with_repo
@@ -142,12 +145,8 @@ class Image:
 
         if options.image_format == ImageFormat.V2:
             with open(layers_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
-                if Digest.is_digest(options.reference):
-                    repo_tags = []
-                elif self.registry._host == DEFAULT_REGISTRY_HOST and self.repo == DEFAULT_REPO:
-                    repo_tags = [f"{self.name}:{options.reference}"]
-                else:
-                    repo_tags = [f"{self.registry._host}/{self.repo_tag(options.reference)}"]
+                repo_tag = self.repo_tag(options.reference)
+                repo_tags = [repo_tag] if repo_tag else []
                 data = {
                     "Config": f"{image_config_digest.hex}.json",
                     "RepoTags": repo_tags,
@@ -159,7 +158,6 @@ class Image:
             return image_save_path
 
     def pull(self, options: ImagePullOptions) -> pathlib.Path:
-        self._update_header(accept="application/vnd.docker.distribution.manifest.v2+json")
         if not options.save_dir.exists():
             options.save_dir.mkdir(parents=True)
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
@@ -197,16 +195,16 @@ class Image:
         if last:
             params["last"] = last
         resp = self._send_req_with_scope("tags/list", scope, "GET", params=params)
-        if resp.status_code in [401, 404]:
-            raise ImageNotFoundError(self.name)
+        if resp.status_code in [401, 404]:  # docker hub status_code is 401, harbor is 404, registry mirror is 200
+            logger.warning("image may be dont exist, return empty list")
+            return []
         resp.raise_for_status()
-        return resp.json().get("tags", [])
+        tags = resp.json().get("tags", None)
+        return tags if tags is not None else []
 
     def exist(self, ref: str) -> Union[bool, Digest]:
         scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
         resp = self._send_req_with_scope(f"manifests/{ref}", scope, "HEAD")
-        logger.info(resp.text)
-        logger.info(resp.headers)
         if resp.status_code != 200:
             return False
         logger.debug(resp.headers)
@@ -217,11 +215,12 @@ class Image:
         scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
         resp = self._send_req_with_scope(f"manifests/{ref}", scope, "GET")
         if Digest.is_digest(ref):
+            digest = Digest(ref) if isinstance(ref, str) else ref
             logger.info("Check image manifest digest")
-            assert Digest(ref) == Digest.from_bytes(resp.content), ImageManifestCheckError()
+            assert digest == Digest.from_bytes(resp.content), ImageManifestCheckError()
         if resp.json().get("mediaType") == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
             target_digest = ManifestsListHandler(resp).filter(platform)
-            resp = self.get_manifest(target_digest)
+            return self.get_manifest(target_digest)
         return ManifestsHandler(resp)
 
     def put_manifest(self):

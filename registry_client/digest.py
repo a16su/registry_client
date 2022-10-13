@@ -66,7 +66,9 @@ class Digest:
         return Digest(f"{algorithm.value}:{hash_value}")
 
     @classmethod
-    def is_digest(cls, value: str):
+    def is_digest(cls, value: Union[str, "Digest"]):
+        if isinstance(value, Digest):
+            return True
         return DIGEST_REGEX.match(value)
 
     def validate_bytes(self, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):

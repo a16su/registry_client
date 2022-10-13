@@ -9,6 +9,7 @@ from loguru import logger
 
 from registry_client.auth import Auther, EmptyToken, Token
 from registry_client.image import Image
+from registry_client.media_types import ImageMediaType, OCIImageMediaType
 from registry_client.scope import RegistryScope, Scope
 
 HeaderType = Dict[str, str]
@@ -27,6 +28,15 @@ class Registry:
         self.client = client
         self._auth_config: Optional[Auther] = None
         self._auth_cache: Dict[str, Token] = {}
+        self.client.headers["accept"] = ", ".join(
+            (
+                ImageMediaType.MediaTypeDockerSchema2Manifest.value,
+                ImageMediaType.MediaTypeDockerSchema2ManifestList.value,
+                OCIImageMediaType.MediaTypeImageManifest.value,
+                OCIImageMediaType.MediaTypeImageIndex.value,
+                "*/*",
+            )
+        )
 
     def __eq__(self, other):
         return self.name == other.name

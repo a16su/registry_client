@@ -32,3 +32,18 @@ class ImageMediaType(Enum):
     # Encypted media types
     MediaTypeImageLayerEncrypted = V1ImageMediaType.MediaTypeImageLayer.value + "+encrypted"
     MediaTypeImageLayerGzipEncrypted = V1ImageMediaType.MediaTypeImageLayerGzip.value + "+encrypted"
+
+
+# https://github.com/containerd/containerd/raw/main/vendor/github.com/opencontainers/image-spec/specs-go/v1/mediatype.go
+class OCIImageMediaType(Enum):
+    MediaTypeDescriptor = "application/vnd.oci.descriptor.v1+json"
+    MediaTypeLayoutHeader = "application/vnd.oci.layout.header.v1+json"
+    MediaTypeImageManifest = "application/vnd.oci.image.manifest.v1+json"
+    MediaTypeImageIndex = "application/vnd.oci.image.index.v1+json"
+    MediaTypeImageLayer = "application/vnd.oci.image.layer.v1.tar"
+    MediaTypeImageLayerGzip = "application/vnd.oci.image.layer.v1.tar+gzip"
+    MediaTypeImageLayerZstd = "application/vnd.oci.image.layer.v1.tar+zstd"
+    MediaTypeImageLayerNonDistributable = "application/vnd.oci.image.layer.nondistributable.v1.tar"
+    MediaTypeImageLayerNonDistributableGzip = "application/vnd.oci.image.layer.nondistributable.v1.tar+gzip"
+    MediaTypeImageLayerNonDistributableZstd = "application/vnd.oci.image.layer.nondistributable.v1.tar+zstd"
+    MediaTypeImageConfig = "application/vnd.oci.image.config.v1+json"
