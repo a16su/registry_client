@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/27-下午6:40
-from typing import List, Literal, Optional, Union
+import sys
+from typing import List, Optional, Union
+
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from typing_extensions import Literal
 
 import httpx
 from pydantic import BaseModel, Field

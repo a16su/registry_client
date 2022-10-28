@@ -2,11 +2,16 @@
 # encoding: utf-8
 import json
 import pathlib
+import sys
 import tempfile
-import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Iterable, List, Literal, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
+
+if sys.version_info >= (3, 8):
+    from typing import Literal
+else:
+    from typing_extensions import Literal
 
 import httpx
 import requests
@@ -18,12 +23,11 @@ from registry_client.errors import ImageNotFoundError
 from registry_client.export import TarImageDir
 from registry_client.manifest import ManifestClient, ManifestIndex, ManifestList
 from registry_client.media_types import ImageMediaType
-from registry_client.platforms import Arch, Platform
+from registry_client.platforms import Platform
 from registry_client.reference import (
     DigestReference,
     Reference,
     Repository,
-    TagReference,
 )
 from registry_client.scope import RepositoryScope
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
