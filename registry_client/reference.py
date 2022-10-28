@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/24-下午2:52
-import re
 from dataclasses import dataclass
+from typing import ClassVar
+
+import re2
 
 from registry_client.digest import Digest
 
 NameTotalLengthMax = 255
-reference_regexp = re.compile(
-    r"^((?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(?:(?:\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))+)?(?::[0-9]+)?/)?[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?(?:(?:/[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?)+)?)(?::([\w][\w.-]{0,127}))?(?:@([A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*:\d{32,}))?$"
+reference_regexp = re2.compile(
+    "^((?:(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(?:(?:\\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))+)?(?::[0-9]+)?/)?[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?(?:(?:/[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?)+)?)(?::([\\w][\\w.-]{0,127}))?(?:@([A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}))?$"
 )
-anchored_name_regexp = re.compile(
-    r"^(?:((?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(?:(?:\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))+)?(?::[0-9]+)?)/)?([a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?(?:(?:/[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?)+)?)$"
+anchored_name_regexp = re2.compile(
+    "^(?:((?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])(?:(?:\\.(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]))+)?(?::[0-9]+)?)/)?([a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?(?:(?:/[a-z0-9]+(?:(?:(?:[._]|__|[-]*)[a-z0-9]+)+)?)+)?)$"
 )
 
 
@@ -31,16 +33,31 @@ class Reference:
     repository: Repository
     tag: str = ""
     digest: Digest = ""
+    is_named_only: ClassVar[bool] = True
+    is_named_tagged: ClassVar[bool] = False
+    is_named_digested: ClassVar[bool] = False
+
+    @property
+    def path(self):
+        return self.repository.path
 
 
 @dataclass
 class TagReference(Reference):
+    is_named_only: ClassVar[bool] = False
+    is_named_tagged: ClassVar[bool] = True
+    is_named_digested: ClassVar[bool] = False
+
     def __str__(self):
         return f"{self.repository.name()}:{self.tag}"
 
 
 @dataclass
 class DigestReference(Reference):
+    is_named_only: ClassVar[bool] = False
+    is_named_tagged: ClassVar[bool] = False
+    is_named_digested: ClassVar[bool] = True
+
     def __str__(self):
         return f"{self.repository.name()}@{self.digest}"
 

@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/24-下午4:06
-from typing import Any, Dict, Optional
+import urllib.parse
+from typing import Optional
 
-import requests
+from loguru import logger
 
-from registry_client.registry import Registry
+from registry_client.auth import AuthClient
+from registry_client.image import ImageClient
+from registry_client.reference import Repository
+from registry_client.repo import RepoClient
+from registry_client.utlis import parse_normalized_named
 
-DEFAULT_REGISTRY_HOST = "https://registry-1.docker.io"
 
+class RegistryClient:
+    def __init__(self, host="https://registry-1.docker.io", username: str = "", password: str = "", skip_verify=False):
+        self._username = username
+        self._password = password
+        self.client = AuthClient(base_url=host, auth=(username, password), verify=not skip_verify)
+        domain = urllib.parse.urlparse(host).netloc
+        self._repo_info = Repository(domain, path="")
+        self._registry_client = RepoClient(self.client)
 
-class RegistryClient(requests.Session):
-    def __init__(self, verify=True, proxy: Optional[Dict] = None):
-        super(RegistryClient, self).__init__()
-        self.verify = verify
-        self.proxies = proxy or {}
-        self._registries = {}
+    def catalog(self, count: int = None, last: str = None):
+        resp = self._registry_client.list(count, last)
+        resp.raise_for_status()
+        return resp.json().get("repositories", [])
 
-    def _get(self, url: str, params: Dict[str, Any] = None, **kwargs) -> requests.Response:
-        return self.get(url, params=params, **kwargs)
-
-    def _post(self, url: str, body: Dict, **kwargs) -> requests.Response:
-        return self.post(url, json=body, **kwargs)
-
-    def _delete(self, url: str, **kwargs) -> requests.Response:
-        return self.delete(url=url, **kwargs)
-
-    def _head(self, url: str, **kwargs) -> requests.Response:
-        return self.head(url, **kwargs)
-
-    def registry(
-        self, host: str = DEFAULT_REGISTRY_HOST, username: str = "", password: str = "", name: Optional[str] = None
-    ) -> Registry:
-        if not host:
-            host = DEFAULT_REGISTRY_HOST
-        reg = Registry(client=self, host=host, username=username, password=password, name=name)
-        self._registries[reg.name] = reg
-        return reg
+    def list_tags(self, image_name: str, limit: Optional[int] = None, last: Optional[str] = None):
+        ref = parse_normalized_named(image_name)
+        assert ref.is_named_only, Exception("No tag or digest allowed in reference")
+        resp = ImageClient(self.client).list_tag(ref.repository, limit, last)
+        if resp.status_code in [401, 404]:  # docker hub status_code is 401, harbor is 404, registry mirror is 200
+            logger.warning("image may be dont exist, return empty list")
+            return []
+        resp.raise_for_status()
+        tags = resp.json().get("tags", None)
+        return tags if tags is not None else []

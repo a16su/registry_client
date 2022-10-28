@@ -1,8 +1,8 @@
 import gzip
+import json
 import os
 import pathlib
 import tarfile
-import json
 from typing import List
 
 from loguru import logger

@@ -4,14 +4,13 @@
 import pathlib
 from typing import Optional
 
-from typer import Typer, Option, Argument, Context, Exit, BadParameter, echo
+from typer import Argument, BadParameter, Context, Exit, Option, Typer, echo
 
+from registry_client.client import RegistryClient
+from registry_client.image import ImageFormat
+from registry_client.platforms import OS, Arch, Platform
 from registry_client.reference import Reference
 from registry_client.utlis import parse_normalized_named
-from registry_client.platforms import OS, Arch, Platform
-from registry_client.client import RegistryClient, DEFAULT_REGISTRY_HOST
-from registry_client.registry import Registry
-from registry_client.image import ImageFormat
 
 app = Typer(name="registry_client")
 
@@ -67,9 +66,9 @@ image_name_option = Argument(
 
 @app.command("list-tags")
 def list_tags(
-    name: str = image_name_option,
-    limit: int = Option(default=None, help="limit return count", min=0),
-    last: str = Option(default=None, help="the last tag for pagination"),
+        name: str = image_name_option,
+        limit: int = Option(default=None, help="limit return count", min=0),
+        last: str = Option(default=None, help="the last tag for pagination"),
 ):
     ref: Reference = name
     new_registry = Registry(client=Context.client, host=f"https://{ref.repository.domain}", **Context.auth_info)
@@ -80,15 +79,15 @@ def list_tags(
 
 @app.command("pull")
 def pull_image(
-    name: str = image_name_option,
-    platform: str = Option(
-        None, "--platform", "-p", help="", callback=platform_callback, autocompletion=platform_complete
-    ),
-    image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
-    save_to: pathlib.Path = Option(..., help="save image to which dir"),
-    just_download: bool = Option(False, help="just download image config and layer, don't tar them to image"),
-    plain_http: bool = Option(False, help="allow connections using plain HTTP"),
-    skip_verify: bool = Option(False, help="skip SSL certificate validation"),
+        name: str = image_name_option,
+        platform: str = Option(
+            None, "--platform", "-p", help="", callback=platform_callback, autocompletion=platform_complete
+        ),
+        image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
+        save_to: pathlib.Path = Option(..., help="save image to which dir"),
+        just_download: bool = Option(False, help="just download image config and layer, don't tar them to image"),
+        plain_http: bool = Option(False, help="allow connections using plain HTTP"),
+        skip_verify: bool = Option(False, help="skip SSL certificate validation"),
 ):
     want_platform: Optional[Platform] = platform
     if save_to.exists() and not save_to.is_dir():
@@ -97,10 +96,10 @@ def pull_image(
 
 @app.command("tar")
 def tar_to_image(
-    image_dir: pathlib.Path = Option(..., "--image-dir", "-C", help="image config and layer dir"),
-    save_to: pathlib.Path = Option(..., "--output", "-o", help="save image to"),
-    image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
-    compress: bool = Option(False, "-z", help="compress image by gzip"),
+        image_dir: pathlib.Path = Option(..., "--image-dir", "-C", help="image config and layer dir"),
+        save_to: pathlib.Path = Option(..., "--output", "-o", help="save image to"),
+        image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
+        compress: bool = Option(False, "-z", help="compress image by gzip"),
 ):
     if not image_dir.exists():
         raise BadParameter(f"{image_dir} doesn't exists")
@@ -118,10 +117,10 @@ def tar_to_image(
 
 @app.callback()
 def main(
-    version: Optional[bool] = Option(None, "--version", callback=version_callback, is_eager=True),
-    ignore_cert_error: bool = Option(False, help="either ignore server cert error"),
-    username: str = Option("", help="registry username"),
-    password: str = Option("", help="registry password", hide_input=True),
+        version: Optional[bool] = Option(None, "--version", callback=version_callback, is_eager=True),
+        ignore_cert_error: bool = Option(False, help="either ignore server cert error"),
+        username: str = Option("", help="registry username"),
+        password: str = Option("", help="registry password", hide_input=True),
 ):
     Context.client = RegistryClient(verify=not ignore_cert_error)
     Context.auth_info = {"username": username, "password": password}

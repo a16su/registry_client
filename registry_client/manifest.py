@@ -1,49 +1,73 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/27-下午6:40
-from typing import Dict
+from typing import List, Literal, Optional, Union
 
-import requests
-from loguru import logger
+import httpx
+from pydantic import BaseModel, Field
 
+from registry_client.auth import AuthClient
 from registry_client.digest import Digest
-from registry_client.media_types import ImageMediaType
+from registry_client.media_types import ImageMediaType, OCIImageMediaType
 from registry_client.platforms import Platform
+from registry_client.reference import Reference
+from registry_client.scope import RepositoryScope
 
 
-class LayerInfo:
-    def __init__(self, info: Dict):
-        self.mediaType = ImageMediaType(info["mediaType"])
-        self.size = info["size"]
-        self.digest = Digest(info["digest"])
-        self.platform = Platform(**info["platform"]) if info.get("platform") else None
+class LayerInfo(BaseModel):
+    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
+    size: int
+    digest: Digest
+    platform: Optional[Platform] = Field(default_factory=Platform)
 
 
-class ManifestsHandler:
-    def __init__(self, resp: requests.Response):
-        info = resp.json()
-        logger.info(info)
-        self.schema_version = info["schemaVersion"]
-        self.media_type = ImageMediaType(info.get("mediaType", ImageMediaType.MediaTypeDockerSchema2Manifest.value))
-        self.config = LayerInfo(info["config"])
-        self.layers = [LayerInfo(one) for one in info["layers"]]
+class ManifestIndex(BaseModel):
+    schema_version: str = Field(alias="schemaVersion")
+    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
+    config: LayerInfo
+    layers: List[LayerInfo]
 
 
-class ManifestsListHandler:
-    def __init__(self, resp: requests.Response):
-        info = resp.json()
-        logger.info(info)
-        self.manifests = [LayerInfo(one) for one in info["manifests"]]
-        self.media_type = ImageMediaType(info["mediaType"])
-        self.schema_version = info["schemaVersion"]
+class ManifestList(BaseModel):
+    manifests: List[LayerInfo]
+    schema_version: str = Field(alias="schemaVersion")
+    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
 
-    def filter(self, target_platform: Platform) -> Digest:
-        """sample filter"""
-        target_platform = target_platform or Platform()
+    def filter_by_platform(self, platform: Platform) -> Digest:
+        if platform is None:
+            return self.manifests[0].digest
         for manifest in self.manifests:
-            if manifest.platform == target_platform:
-                target_manifest = manifest
-                break
+            if manifest.platform == platform:
+                return manifest.digest
         else:
             raise Exception("Not Found Matching image")
-        return target_manifest.digest
+
+
+class ManifestClient:
+    def __init__(self, client: AuthClient):
+        self.client = client
+        self.client.headers.update(
+            {
+                "accept": ", ".join(
+                    (
+                        ImageMediaType.MediaTypeDockerSchema2Manifest.value,
+                        ImageMediaType.MediaTypeDockerSchema2ManifestList.value,
+                        OCIImageMediaType.MediaTypeImageManifest.value,
+                        OCIImageMediaType.MediaTypeImageIndex.value,
+                        "*/*",
+                    )
+                )
+            }
+        )
+
+    def _send_request(self, method: Literal["GET", "HEAD"], ref: Reference) -> httpx.Response:
+        scope = RepositoryScope(ref.repository.path, actions=["pull"])
+        target = ref.tag or ref.digest
+        url = f"/v2/{ref.repository.path}/manifests/{target}"
+        return self.client.request(method, url, auth=scope)
+
+    def head(self, ref: Reference) -> httpx.Response:
+        return self._send_request("HEAD", ref)
+
+    def get(self, ref: Reference) -> httpx.Response:
+        return self._send_request("GET", ref)

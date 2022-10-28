@@ -1,10 +1,11 @@
 import hashlib
-import re
-from dataclasses import dataclass
+from collections import UserString
 from enum import Enum
 from typing import Any, Callable, Union
 
-DIGEST_REGEX = re.compile(r"sha(256|384|512):[a-z0-9]{64}")
+import re2
+
+DIGEST_REGEX = re2.compile(r"sha(256|384|512):[a-z0-9]{64}")
 
 
 class Algorithm(Enum):
@@ -16,14 +17,24 @@ class Algorithm(Enum):
 DEFAULT_ALGORITHM = Algorithm.SHA256
 
 
-@dataclass
-class Digest:
-    digest_str: str
-
-    def __post_init__(self):
-        self._raw = self.digest_str
-        self._algorithm, self._hash = self.digest_str.split(":")
+class Digest(UserString):
+    def __init__(self, seq):
+        super(Digest, self).__init__(seq)
+        self._algorithm, self._hash = self.data.split(":")
         self._algorithm = Algorithm(self._algorithm)
+
+    @classmethod
+    def __get_validators__(cls):
+        # one or more validators may be yielded which will be called in the
+        # order to validate the input, each validator will receive as an input
+        # the value returned from the previous validator
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not cls.is_digest(v):
+            raise ValueError("invalid postcode format")
+        return cls(v)
 
     @classmethod
     def _get_hasher(cls, algom: Algorithm) -> Callable[[Union[str, bytes]], Any]:
@@ -31,17 +42,6 @@ class Digest:
         if hash_func is None:
             raise Exception(f"Error Hash Algorithm: {algom}")
         return hash_func
-
-    def __eq__(self, other: "Digest"):
-        return self.value == other.value
-
-    def __ne__(self, other: "Digest"):
-        return not self == other
-
-    def __str__(self):
-        return self.value
-
-    __repr__ = __str__
 
     @property
     def hex(self) -> str:
@@ -57,7 +57,7 @@ class Digest:
 
     @property
     def value(self) -> str:
-        return self._raw
+        return self.data
 
     @classmethod
     def from_bytes(cls, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
@@ -74,12 +74,3 @@ class Digest:
     def validate_bytes(self, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
         new_digest = self.from_bytes(content, algorithm)
         return self == new_digest
-
-
-if __name__ == "__main__":
-    d = Digest.from_bytes("123".encode())
-    print(d.algom)
-    print(d.hex)
-    print(d.short)
-    print(d.value)
-    assert d.validate_bytes("123".encode())

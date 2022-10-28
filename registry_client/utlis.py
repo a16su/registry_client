@@ -1,6 +1,7 @@
 import hashlib
-import re
 from typing import List
+
+import re2
 
 from registry_client import reference
 
@@ -13,10 +14,10 @@ INDEX_NAME = "docker.io"
 
 def split_docker_domain(name: str):
     index = name.find("/")
-    if index == -1 or (not re.findall(r"[.:]", name[:index]) and name[:index] != "localhost"):
+    if index == -1 or (not re2.findall(r"[.:]", name[:index]) and name[:index] != "localhost"):
         domain, remainder = DEFAULT_REGISTRY_HOST, name
     else:
-        domain, remainder = name[:index], name[index + 1 :]
+        domain, remainder = name[:index], name[index + 1:]
     if domain == "index.docker.io":
         domain = DEFAULT_REGISTRY_HOST
     if domain == DEFAULT_REGISTRY_HOST and "/" not in remainder:
@@ -25,7 +26,7 @@ def split_docker_domain(name: str):
 
 
 def parse_normalized_named(name: str) -> reference.Reference:
-    if re.match(r"^([a-f0-9]{64})$", name):
+    if re2.match(r"^([a-f0-9]{64})$", name):
         raise Exception(f"invalid repository name ({name}), cannot specify 64-byte hexadecimal strings")
     domain, remainder = split_docker_domain(name)
     if remainder.find(":") != -1:
@@ -55,7 +56,6 @@ def diff_ids_to_chain_ids(diff_ids: List[str]) -> List[str]:
         result.append(get_chain_id(result[-1], [diff_id]))
     return result
 
-
 # def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
 #     config = {"created": "1970-01-01T08:00:00+08:00", "layer_id": layer_id}
 #     if parent != "":
@@ -77,5 +77,3 @@ def diff_ids_to_chain_ids(diff_ids: List[str]) -> List[str]:
 #     variant: Optional[str]
 #     os: Optional[str]
 #     size: Optional[float]
-if __name__ == "__main__":
-    parse_normalized_named("127.0.0.1:8000/library/hello")

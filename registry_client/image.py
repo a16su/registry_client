@@ -3,22 +3,32 @@
 import json
 import pathlib
 import tempfile
+import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Dict, Iterable, List, Literal, Optional, Union
 
+import httpx
 import requests
 from loguru import logger
-from tqdm import tqdm
 
+from registry_client.auth import AuthClient
 from registry_client.digest import Digest
-from registry_client.errors import ImageManifestCheckError, ImageNotFoundError
-from registry_client.export import GZIP_MAGIC, GZipDeCompress, TarImageDir
-from registry_client.manifest import ManifestsHandler, ManifestsListHandler
+from registry_client.errors import ImageNotFoundError
+from registry_client.export import TarImageDir
+from registry_client.manifest import ManifestClient, ManifestIndex, ManifestList
 from registry_client.media_types import ImageMediaType
-from registry_client.platforms import Platform
-from registry_client.scope import RepositoryScope, Scope
+from registry_client.platforms import Arch, Platform
+from registry_client.reference import (
+    DigestReference,
+    Reference,
+    Repository,
+    TagReference,
+)
+from registry_client.scope import RepositoryScope
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
+
+MAX_MANIFEST_SIZE = 4 * 1048 * 1048
 
 
 class ImageFormat(Enum):
@@ -36,108 +46,74 @@ class ImagePullOptions:
     compression: bool = False
 
 
-class Layer:
-    def __init__(self, digest: Digest, image: "Image", save_dir: pathlib.Path):
-        self.digest = digest
-        self.image = image
-        self.client = image.client
-        self.save_dir = save_dir
+class BlobClient:
+    def __init__(self, client: AuthClient):
+        self.client = client
 
-    def get_blob(self) -> pathlib.Path:
-        save_file = self.save_dir.joinpath(f"{self.digest.hex}.layer").absolute()
-        url = self.image._build_url(f"blobs/{self.digest}")
-        with requests.get(url, headers=self.client.headers, stream=True) as resp, open(save_file, "wb") as f:
-            for chunk in resp.iter_content(5120):
-                if chunk:
-                    data_size = f.write(chunk)
-        logger.info(f"download layer {self.digest} to {save_file.absolute()}")
-        return save_file.absolute()
+    def _send_req(
+            self,
+            method: Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
+            ref: DigestReference,
+            actions: List[str],
+            params: Optional[Dict] = None,
+            body: Optional[Dict] = None,
+    ) -> Union[Iterable[httpx.Response], httpx.Response]:
+        if not ref.is_named_digested:
+            raise Exception("reference must be a digest")
+        scope = RepositoryScope(ref.path, actions=actions)
+        url = f"/v2/{ref.path}/blobs/{ref.digest}"
+        if method == "STREAM":
+            return self.client.stream("GET", url=url, auth=scope, params=params)
+        return self.client.request(method, url=url, auth=scope, params=params, json=body)
 
-    def export_to_tar(self):
-        save_file = self.get_blob()
-        target = save_file.with_suffix(".tar")
-        with save_file.open("rb") as f:
-            head = f.read(10)
-            if head.startswith(GZIP_MAGIC):
-                GZipDeCompress(save_file, target).do()
-                save_file.unlink()
-                return target
-        save_file.rename(target)
-        return target
+    def get(self, ref: DigestReference, stream=False) -> Union[Iterable[httpx.Response], httpx.Response]:
+        method = "STREAM" if stream else "GET"
+        return self._send_req(method=method, ref=ref, actions=["pull"])
 
-    def delete(self):
-        url = self.image._build_url(f"blobs/{self.digest}")
-        resp = requests.delete(url, headers=self.client.headers)
+    def delete(self, ref: DigestReference) -> httpx.Response:
+        return self._send_req("DELETE", ref=ref, actions=["pull"])
 
-    def push_blob(self):
-        pass
-
-    def head(self) -> bool:
-        url = self.image._build_url(f"blobs/{self.digest}")
-        resp = requests.head(url, headers=self.client.headers)
-        return resp.status_code == 200
+    def head(self, ref: DigestReference) -> httpx.Response:
+        return self._send_req(method="HEAD", ref=ref, actions=["pull"])
 
 
-class Image:
-    def __init__(self, name: str, registry: "Registry"):
-        if "/" in name:
-            repo, name = name.rsplit("/", 1)
-        else:
-            repo = DEFAULT_REPO
-        self.repo = repo
-        self.name = name
-        self._name_with_repo = f"{self.repo}/{self.name}"
-        self.registry = registry
-        self.client = registry.client
+class ImageClient:
+    def __init__(self, client: AuthClient):
+        self.client = client
+        self._blob_client = BlobClient(client)
+        self._manifest_client = ManifestClient(client)
 
-    def repo_tag(self, reference: str):
+    def repo_tag(self, reference: Reference):
         assert reference != ""
-        if Digest.is_digest(reference):
+        if isinstance(reference, DigestReference):
             return None
-        if self.registry._host == DEFAULT_REGISTRY_HOST:
-            if self.repo == DEFAULT_REPO:
-                return f"{self.name}:{reference}"
-            return f"{self.repo}/{self.name}:{reference}"
-        return f"{self.registry._host}/{self.repo}/{self.name}:{reference}"
+        target = reference.tag
+        result = reference.repository.path.split("/", 1)
+        if self.client.base_url.netloc.decode() == DEFAULT_REGISTRY_HOST:
+            if len(result) == 2 and result[0] == DEFAULT_REPO:
+                return f"{result[-1]}:{target}"
+            return f"{reference.path}:{target}"
+        return str(reference)
 
-    def __str__(self):
-        return self._name_with_repo
-
-    def __eq__(self, other: "Image"):
-        return self.registry == other.registry and self._name_with_repo == other._name_with_repo
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    __repr__ = __str__
-
-    def _set_auth_header(self, scope: Scope):
-        self._update_header(**self.registry.auth_with_scope(scope).token)
-
-    def _update_header(self, **kwargs):
-        self.client.headers.update(kwargs)
-
-    def _build_url(self, url_suffix):
-        return self.registry.build_url(f"/v2/{self._name_with_repo}/{url_suffix}")
-
-    def _send_req_with_scope(self, url_suffix: str, scope: Scope, method: str, **kwargs) -> requests.Response:
-        self._set_auth_header(scope)
-        url = self._build_url(url_suffix)
-        func = getattr(self.client, f"_{method.lower()}")
-        return func(url, **kwargs)
-
-    def _download_layer_and_save(self, save_dir: pathlib.Path, digest: Digest) -> pathlib.Path:
-        layer = Layer(digest, self, save_dir=save_dir)
-        tar_file = layer.export_to_tar()
-        return tar_file
+    def list_tag(self, ref: Repository, limit: Optional[int] = None, last: Optional[str] = None) -> httpx.Response:
+        name = ref.path
+        scope = RepositoryScope(repo_name=name, actions=["pull"])
+        params = {}
+        if limit:
+            params["n"] = limit
+        if last:
+            params["last"] = last
+        return self.client.get(f"/v2/{name}/tags/list", auth=scope, params=params)
 
     def _tar_layers(
-        self,
-        image_config: requests.Response,
-        layers_file_list: List[pathlib.Path],
-        layers_dir: pathlib.Path,
-        options: ImagePullOptions,
+            self,
+            reference: Reference,
+            image_config: requests.Response,
+            layers_file_list: List[pathlib.Path],
+            layers_dir: pathlib.Path,
+            options: ImagePullOptions,
     ):
+        target = reference.tag or reference.digest.short
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
         with layers_dir.joinpath(f"{image_config_digest.hex}.json").open("w", encoding="utf-8") as f:
@@ -145,7 +121,7 @@ class Image:
 
         if options.image_format == ImageFormat.V2:
             with open(layers_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
-                repo_tag = self.repo_tag(options.reference)
+                repo_tag = self.repo_tag(reference)
                 repo_tags = [repo_tag] if repo_tag else []
                 data = {
                     "Config": f"{image_config_digest.hex}.json",
@@ -153,75 +129,78 @@ class Image:
                     "Layers": [path.name for path in layers_file_list],
                 }
                 json.dump([data], f)
-            image_save_path = options.save_dir.joinpath(f"{self.repo}_{self.name}.tar")
+            image_save_path = options.save_dir.joinpath(f"{reference.repository.name().replace('/', '_')}_{target}.tar")
             TarImageDir(src_dir=layers_dir, target_path=image_save_path).do()
             return image_save_path
 
-    def pull(self, options: ImagePullOptions) -> pathlib.Path:
+    def _get_manifest(self, resp: httpx.Response, ref: DigestReference, platform: Platform = None) -> ManifestIndex:
+        if resp.status_code == 404:
+            raise ImageNotFoundError(ref)
+        resp.raise_for_status()
+        media_type = resp.headers.get("Content-Type")
+        if media_type == ImageMediaType.MediaTypeDockerSchema2Manifest.value:
+            return ManifestIndex(**resp.json())
+        elif media_type == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
+            manifest_list = ManifestList(**resp.json())
+            digest = manifest_list.filter_by_platform(platform)
+            new_ref = DigestReference(ref.repository, digest=digest)
+            resp = self._manifest_client.get(new_ref)
+            return self._get_manifest(resp, ref, platform)
+        else:
+            raise Exception("no match handler")
+
+    def pull(self, ref: Reference, options: ImagePullOptions) -> pathlib.Path:
         if not options.save_dir.exists():
             options.save_dir.mkdir(parents=True)
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
-        scope = RepositoryScope(self._name_with_repo, actions=["pull"])
-        self._set_auth_header(scope)
-        image_manifest: Digest = self.exist(options.reference)
-        if not image_manifest:
-            raise ImageNotFoundError(self._name_with_repo, options.reference)
-        manifest = self.get_manifest(options.reference, platform=options.platform)
-        image_config = self.get_image_config(manifest.config.digest)
+        if ref.digest:
+            manifest_digest = ref.digest
+        else:
+            manifest_content_digest_resp: httpx.Response = self._manifest_client.head(ref)
+            if manifest_content_digest_resp.status_code != 200:
+                raise ImageNotFoundError(ref)
+            manifest_digest = manifest_content_digest_resp.headers.get("docker-content-digest")
+            if manifest_digest is None:
+                manifest_digest = Digest.from_bytes(manifest_content_digest_resp.content)
+        r = DigestReference(ref.repository, digest=manifest_digest)
+        manifest_content_resp = self._manifest_client.get(r)
+        manifest = self._get_manifest(manifest_content_resp, r, options.platform)
+        image_digest = DigestReference(r.repository, digest=manifest.config.digest)
+        image_config = self.get_image_config(image_digest)
+        logger.info(image_config.text)
+        logger.info(manifest)
         layers_file_list = []
-        with tqdm(total=len(manifest.layers)) as progress:
-            for one_layer in manifest.layers:
-                tar_file = self._download_layer_and_save(save_dir=pathlib.Path(tmp_dir.name), digest=one_layer.digest)
-                layers_file_list.append(tar_file)
-                progress.update(1)
+        for one_layer in manifest.layers:
+            layer_path = pathlib.Path(tmp_dir.name).joinpath(f"{one_layer.digest.hex}.tar")
+            is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
+            with open(layer_path, "wb") as f:
+                with self._blob_client.get(
+                        DigestReference(image_digest.repository, digest=one_layer.digest), stream=True
+                ) as resp:
+                    if is_gzip:
+                        if resp.headers.get("Content-Encoding") is None:
+                            resp.headers["content-encoding"] = "gzip"  # let httpx decode gzip
+                    for content in resp.iter_bytes():
+                        f.write(content)
+            layers_file_list.append(layer_path)
         image_path = self._tar_layers(
+            ref,
             image_config=image_config,
             layers_file_list=layers_file_list,
             layers_dir=pathlib.Path(tmp_dir.name),
             options=options,
         )
-        logger.info(f"image save to {image_path}")
+        # logger.info(f"image save to {image_path}")
+        # return image_path
         return image_path
 
     @classmethod
     def push(cls, image_path: pathlib.Path, force=False):
         assert image_path.exists() and image_path.is_file()
 
-    def get_tags(self, limit: Optional[int] = None, last: Optional[str] = None) -> List[str]:
-        scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
-        params = {}
-        if limit:
-            params["n"] = limit
-        if last:
-            params["last"] = last
-        resp = self._send_req_with_scope("tags/list", scope, "GET", params=params)
-        if resp.status_code in [401, 404]:  # docker hub status_code is 401, harbor is 404, registry mirror is 200
-            logger.warning("image may be dont exist, return empty list")
-            return []
-        resp.raise_for_status()
-        tags = resp.json().get("tags", None)
-        return tags if tags is not None else []
-
-    def exist(self, ref: str) -> Union[bool, Digest]:
-        scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
-        resp = self._send_req_with_scope(f"manifests/{ref}", scope, "HEAD")
-        if resp.status_code != 200:
-            return False
-        logger.debug(resp.headers)
-        dcg = resp.headers.get("Docker-Content-Digest") or resp.headers.get("Etag")
-        return Digest(dcg)
-
-    def get_manifest(self, ref: Union[str, Digest], platform: Platform = None) -> ManifestsHandler:
-        scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
-        resp = self._send_req_with_scope(f"manifests/{ref}", scope, "GET")
-        if Digest.is_digest(ref):
-            digest = Digest(ref) if isinstance(ref, str) else ref
-            logger.info("Check image manifest digest")
-            assert digest == Digest.from_bytes(resp.content), ImageManifestCheckError()
-        if resp.json().get("mediaType") == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
-            target_digest = ManifestsListHandler(resp).filter(platform)
-            return self.get_manifest(target_digest)
-        return ManifestsHandler(resp)
+    def exist(self, ref: Reference) -> bool:
+        resp = self._manifest_client.head(ref)
+        return resp.status_code == 200
 
     def put_manifest(self):
         pass
@@ -229,8 +208,6 @@ class Image:
     def delete_manifest(self):
         pass
 
-    def get_image_config(self, digest: Digest):
-        scope = RepositoryScope(repo_name=self._name_with_repo, actions=["pull"])
-        resp = self._send_req_with_scope(f"blobs/{digest}", scope=scope, method="GET")
-        logger.info(resp.json())
+    def get_image_config(self, ref: DigestReference):
+        resp = self._blob_client.get(ref)
         return resp

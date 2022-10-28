@@ -1,27 +1,16 @@
-import json
 import os
 import shutil
 
 import docker
 import pytest
-import requests
-from loguru import logger
 
 from registry_client.client import RegistryClient
 from registry_client.digest import Digest
-from registry_client.registry import Registry
+from registry_client.image import BlobClient, ImageClient
+from registry_client.manifest import ManifestClient
+from registry_client.repo import RepoClient
 from tests.docker_hub_client import DockerHubClient
 from tests.local_docker import LocalDockerChecker
-
-
-class FakeResponse(requests.Response):
-    def set_content(self, value: str):
-        self._content = bytes(value.encode())
-        return self
-
-    def set_json(self, dict_value):
-        self.set_content(json.dumps(dict_value))
-        return self
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -48,10 +37,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="the docker registry password for test",
     )
     group.addoption(
-        "--registry-ignore-certificate-errors",
+        "--registry-ignore_cert_error",
         action="store_true",
         default=False,
-        dest="ignore_certificate_errors",
+        dest="ignore_cert_error",
         help="ignore registry certificate errors",
     )
     group.addoption(
@@ -60,29 +49,16 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 @pytest.fixture(scope="session")
-def docker_registry_client(pytestconfig: pytest.Config):
-    ignore_cert_errors = not pytestconfig.option.ignore_certificate_errors
-    proxy = pytestconfig.option.registry_proxy or None
-    if proxy:
-        schema = "http"
-        temp = proxy.split("://")
-        if len(temp) == 2:
-            schema, address = temp
-        else:
-            address = temp[-1]
-        proxy = {schema: address}
-    return RegistryClient(proxy=proxy, verify=ignore_cert_errors)
-
-
-@pytest.fixture(scope="session")
-def docker_registry(pytestconfig: pytest.Config, docker_registry_client) -> Registry:
+def docker_registry_client(pytestconfig: pytest.Config) -> RegistryClient:
     host = pytestconfig.option.registry_host
     username = pytestconfig.option.registry_username
     password = pytestconfig.option.registry_password
+    ignore_cert_error = pytestconfig.option.ignore_cert_error
     info_from_env = {
         "host": os.environ.get("REGISTRY_HOST"),
         "username": os.environ.get("REGISTRY_USERNAME"),
         "password": os.environ.get("REGISTRY_PASSWORD"),
+        "skip_verify": ignore_cert_error,
     }
     if host:
         info_from_env["host"] = host
@@ -90,7 +66,28 @@ def docker_registry(pytestconfig: pytest.Config, docker_registry_client) -> Regi
         info_from_env["username"] = username
     if password:
         info_from_env["password"] = password
-    return docker_registry_client.registry(**info_from_env)
+    print(info_from_env)
+    return RegistryClient(**info_from_env)
+
+
+@pytest.fixture(scope="session")
+def repo_client(docker_registry_client):
+    return RepoClient(docker_registry_client.client)
+
+
+@pytest.fixture(scope="session")
+def image_client(docker_registry_client):
+    return ImageClient(docker_registry_client.client)
+
+
+@pytest.fixture(scope="session")
+def manifest_client(docker_registry_client):
+    return ManifestClient(docker_registry_client.client)
+
+
+@pytest.fixture(scope="session")
+def blob_client(docker_registry_client):
+    return BlobClient(docker_registry_client.client)
 
 
 @pytest.fixture(scope="session")
@@ -125,8 +122,3 @@ def image_checker():
 @pytest.fixture(scope="function")
 def random_digest():
     return Digest.from_bytes(os.urandom(1))
-
-
-@pytest.fixture(scope="function")
-def fake_response() -> FakeResponse:
-    return FakeResponse()

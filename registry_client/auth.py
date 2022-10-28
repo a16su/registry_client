@@ -4,16 +4,19 @@
 import base64
 import datetime
 from enum import Enum
-from typing import Dict, Optional
-from urllib.parse import urlparse
+from typing import Dict, NamedTuple, Optional, TypeAlias, Union
+from urllib.parse import unquote
+from urllib.request import parse_http_list
 
+import httpx
 import iso8601
 import requests
+from loguru import logger
 
-from registry_client.scope import Scope
-from registry_client.utlis import DEFAULT_CLIENT_ID, INDEX_NAME
+from registry_client.scope import RepositoryScope, Scope
 
 TOKEN_CACHE_MIN_TIME = 60
+AUTH_TYPE: TypeAlias = Union[httpx._types.AuthTypes, Scope, None]
 
 
 class ChallengeScheme(Enum):
@@ -44,6 +47,8 @@ class EmptyToken(Token):
 
 class BasicToken(Token):
     def __init__(self, username: str, password: str):
+        if username == "" or password == "":
+            raise Exception("failed to handle basic auth because missing username or secret")
         self._auth_header = {"Authorization": f"Basic {encode_auth(username, password)}"}
 
     @property
@@ -73,36 +78,118 @@ class BearerToken(Token):
         return (self._expired_at - now).total_seconds() <= TOKEN_CACHE_MIN_TIME
 
 
-class Auther:
-    def __init__(self, auth_config_header: Optional[str] = None):
-        self._need_auth = True
-        if auth_config_header is None:
-            self._need_auth = False
+class _BearerChallenge(NamedTuple):
+    realm: str
+    service: str
+    scope: str = None
+
+
+class CustomAuth(httpx.Auth):
+    def auth_with_scope(self, request: httpx.Request, scope: Scope) -> httpx.Auth:
+        raise NotImplementedError
+
+
+class BasicAuth(CustomAuth, httpx.BasicAuth):
+    def auth_with_scope(self, request: httpx.Request, scope: Scope):
+        return self
+
+
+class BearerAuth(CustomAuth):
+    def __init__(self, username: str, password: str, challenge: _BearerChallenge):
+        self._username = username
+        self._password = password
+        token = base64.b64encode(f"{self._username}:{self._password}".encode()).decode()
+        self._auth_header = {"Authorization": f"Basic {token}"}
+        self._challenge = challenge
+        self._token_cache: Dict[str, BearerToken] = {}
+
+    def auth_with_scope(self, request: httpx.Request, scope: Scope):
+        scope = str(scope)
+        token_from_cache = self._token_cache.get(scope)
+        if token_from_cache and not token_from_cache.expired:
+            token = token_from_cache
         else:
-            assert auth_config_header
-            scheme, params = auth_config_header.split(" ")
-            param_dict = dict(param.split("=") for param in params.split(","))
-            self.scheme = ChallengeScheme(scheme)
-            self.realm = param_dict.get("realm").strip('"')
-            self.service = param_dict.get("service").strip('"')
+            token = self._build_auth_header(request=request, scope=scope, challenge=self._challenge)
+            self._token_cache[scope] = token
+        request.headers.update(token.token)
+        return self
 
-    @property
-    def need_auth(self) -> bool:
-        return self._need_auth
+    def _build_auth_header(self, request: httpx.Request, scope: str, challenge: _BearerChallenge):
+        params = {
+            "scope": scope,
+            "service": challenge.service,
+            "client_id": "python_registry_client",
+            "account": self._username,
+        }
+        header = self._auth_header
+        if request.url.netloc.endswith(b"docker.io") and not (self._username or self._password):
+            header = None
+        resp = httpx.Client().get(challenge.realm, headers=header, params=params)
+        return BearerToken(resp)
 
-    def auth_with_scope(self, username: str, password: str, scope: Scope, verify=True) -> Token:
-        auth_info = {"Authorization": f"Basic {encode_auth(username, password)}"}
-        if self.scheme == ChallengeScheme.Basic:
-            return BasicToken(username=username, password=password)
-        elif self.scheme == ChallengeScheme.Bearer:
-            params = {
-                "scope": str(scope),
-                "service": self.service,
-                "client_id": DEFAULT_CLIENT_ID,
-                "account": username,
-            }
-            if urlparse(self.realm).netloc.endswith(INDEX_NAME) and not username and not password:
-                auth_info = None
 
-            resp = requests.get(self.realm, params=params, headers=auth_info, verify=verify)
-            return BearerToken(resp)
+def request_hook(request: httpx.Request):
+    logger.debug(f"{request.method} {request.url} {request.headers}")
+
+
+def response_hook(response: httpx.Response):
+    logger.debug(f"RESPONSE: {response.status_code} {response.url} {response.headers}")
+
+
+class AuthClient(httpx.Client):
+    #
+    def __init__(self, auth: Optional[Union[httpx._types.AuthTypes, Scope]] = None, *args, **kwargs):
+        self._ping_flag = False
+        self.__need_auth = True
+        super(AuthClient, self).__init__(auth=auth, *args, **kwargs)
+        self.follow_redirects = True
+        self.event_hooks = {"request": [request_hook], "response": [response_hook]}
+
+    def _parse_challenge(self, auth_header: str) -> _BearerChallenge:
+        scheme, _, fields = auth_header.partition(" ")
+        assert scheme.lower() == "bearer"
+
+        header_dict: Dict[str, str] = {}
+        for field in parse_http_list(fields):
+            key, value = field.strip().split("=", 1)
+            header_dict[key] = unquote(value)
+        try:
+            realm = header_dict["realm"].strip('"')
+            service = header_dict["service"].strip('"')
+            scope = header_dict.get("scope", None)
+            return _BearerChallenge(realm=realm, service=service, scope=scope)
+        except KeyError as exc:
+            raise Exception("Malformed Bearer WWW-Authenticate header") from exc
+
+    def _build_auth(self, auth: Optional[httpx._types.AuthTypes]) -> Optional[httpx.Auth]:
+        if not self.__need_auth and isinstance(auth, Scope):
+            return None
+        if self._ping_flag:
+            return super(AuthClient, self)._build_auth(auth)
+
+        self._username, self._password = auth
+        c = httpx.Client()
+        resp = c.get(self.base_url.join("/v2/"))
+        _auth_header = resp.headers.get("www-authenticate")
+        self._ping_flag = True
+        if not _auth_header:
+            self.__need_auth = False
+            return None
+        if _auth_header.startswith("Basic"):
+            return BasicAuth(self._username, self._password)
+        elif _auth_header.startswith("Bearer"):
+            challenge = self._parse_challenge(auth_header=_auth_header)
+            return BearerAuth(self._username, self._password, challenge)
+        return None
+
+    def _build_request_auth(self, request: httpx.Request, auth: AUTH_TYPE = None) -> httpx.Auth:
+        if not self.__need_auth or auth is None:
+            return httpx.Auth()
+        elif self._auth and isinstance(auth, Scope):
+            return self._auth.auth_with_scope(request, auth)
+        elif isinstance(auth, tuple):
+            return httpx.BasicAuth(*auth)
+        return httpx.Auth()
+
+    def get(self, url: httpx._types.URLTypes, auth: AUTH_TYPE, *args, **kwargs) -> httpx.Response:
+        return super(AuthClient, self).get(url=url, auth=auth, *args, **kwargs)
