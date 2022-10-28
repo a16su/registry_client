@@ -4,7 +4,7 @@
 import base64
 import datetime
 from enum import Enum
-from typing import Dict, NamedTuple, Optional, TypeAlias, Union
+from typing import Dict, NamedTuple, Optional, Union
 from urllib.parse import unquote
 from urllib.request import parse_http_list
 
@@ -13,10 +13,10 @@ import iso8601
 import requests
 from loguru import logger
 
-from registry_client.scope import RepositoryScope, Scope
+from registry_client.scope import Scope
 
 TOKEN_CACHE_MIN_TIME = 60
-AUTH_TYPE: TypeAlias = Union[httpx._types.AuthTypes, Scope, None]
+AUTH_TYPE = Union[httpx._types.AuthTypes, Scope, None]
 
 
 class ChallengeScheme(Enum):

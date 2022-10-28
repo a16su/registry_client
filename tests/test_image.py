@@ -29,10 +29,10 @@ class TestImage:
     @pytest.mark.parametrize(
         "image_name, options",
         (
-                (DEFAULT_IMAGE_NAME + "latest", {}),
-                (DEFAULT_IMAGE_NAME + "latest", {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)}),
-                (f"{DEFAULT_IMAGE_NAME}:linux", {}),
-                (f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4", {}),
+            (DEFAULT_IMAGE_NAME + ":latest", {}),
+            (DEFAULT_IMAGE_NAME + ":latest", {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)}),
+            (f"{DEFAULT_IMAGE_NAME}:linux", {}),
+            (f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4", {}),
         ),
     )
     def test_pull(self, image_client, image_save_dir, image_name, options: Dict[str, Any], image_checker):
@@ -74,16 +74,16 @@ class TestImage:
     @pytest.mark.parametrize(
         "host, image_name, target, want",
         (
-                (DEFAULT_REGISTRY_HOST, "foo", "latest", "foo:latest"),
-                (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}/foo", "latest", "foo:latest"),
-                (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}1/foo", "latest", f"{DEFAULT_REPO}1/foo:latest"),
-                ("a.com", "foo", "latest", "a.com/foo:latest"),
-                ("a.com", "library/foo", "latest", "a.com/library/foo:latest"),
-                ("a.com", "a/b/c/d/foo", "latest", "a.com/a/b/c/d/foo:latest"),
-                (DEFAULT_REGISTRY_HOST, "foo", "digest1", None),
-                (DEFAULT_REGISTRY_HOST, "library/foo", "digest2", None),
-                (DEFAULT_REGISTRY_HOST, "a/b/c/foo", "digest3", None),
-                ("a.com", "a/b/c/foo", "digest3", None),
+            (DEFAULT_REGISTRY_HOST, "foo", "latest", "foo:latest"),
+            (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}/foo", "latest", "foo:latest"),
+            (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}1/foo", "latest", f"{DEFAULT_REPO}1/foo:latest"),
+            ("a.com", "foo", "latest", "a.com/foo:latest"),
+            ("a.com", "library/foo", "latest", "a.com/library/foo:latest"),
+            ("a.com", "a/b/c/d/foo", "latest", "a.com/a/b/c/d/foo:latest"),
+            (DEFAULT_REGISTRY_HOST, "foo", "digest1", None),
+            (DEFAULT_REGISTRY_HOST, "library/foo", "digest2", None),
+            (DEFAULT_REGISTRY_HOST, "a/b/c/foo", "digest3", None),
+            ("a.com", "a/b/c/foo", "digest3", None),
         ),
     )
     def test_image_repo_tag(self, image_client, monkeypatch, random_digest, host, image_name, target, want):

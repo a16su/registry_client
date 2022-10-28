@@ -51,12 +51,12 @@ class BlobClient:
         self.client = client
 
     def _send_req(
-            self,
-            method: Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
-            ref: DigestReference,
-            actions: List[str],
-            params: Optional[Dict] = None,
-            body: Optional[Dict] = None,
+        self,
+        method: Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
+        ref: DigestReference,
+        actions: List[str],
+        params: Optional[Dict] = None,
+        body: Optional[Dict] = None,
     ) -> Union[Iterable[httpx.Response], httpx.Response]:
         if not ref.is_named_digested:
             raise Exception("reference must be a digest")
@@ -106,12 +106,12 @@ class ImageClient:
         return self.client.get(f"/v2/{name}/tags/list", auth=scope, params=params)
 
     def _tar_layers(
-            self,
-            reference: Reference,
-            image_config: requests.Response,
-            layers_file_list: List[pathlib.Path],
-            layers_dir: pathlib.Path,
-            options: ImagePullOptions,
+        self,
+        reference: Reference,
+        image_config: requests.Response,
+        layers_file_list: List[pathlib.Path],
+        layers_dir: pathlib.Path,
+        options: ImagePullOptions,
     ):
         target = reference.tag or reference.digest.short
         assert layers_dir.exists() and layers_dir.is_dir()
@@ -175,7 +175,7 @@ class ImageClient:
             is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
             with open(layer_path, "wb") as f:
                 with self._blob_client.get(
-                        DigestReference(image_digest.repository, digest=one_layer.digest), stream=True
+                    DigestReference(image_digest.repository, digest=one_layer.digest), stream=True
                 ) as resp:
                     if is_gzip:
                         if resp.headers.get("Content-Encoding") is None:
