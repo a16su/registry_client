@@ -10,8 +10,8 @@ from registry_client.platforms import OS, Arch, Platform
 from registry_client.utlis import (
     DEFAULT_REGISTRY_HOST,
     DEFAULT_REPO,
-    parse_normalized_named,
 )
+from registry_client.reference import parse_normalized_named
 from tests.local_docker import LocalDockerChecker
 
 DEFAULT_IMAGE_NAME = "library/hello-world"
@@ -29,7 +29,7 @@ class TestImage:
     @pytest.mark.parametrize(
         "image_name, options",
         (
-            (DEFAULT_IMAGE_NAME + ":latest", {}),
+            (DEFAULT_IMAGE_NAME, {}),
             (DEFAULT_IMAGE_NAME + ":latest", {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)}),
             (f"{DEFAULT_IMAGE_NAME}:linux", {}),
             (f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4", {}),
@@ -93,6 +93,5 @@ class TestImage:
         else:
             target = f":{target}"
         ref_str = f"{host}/{image_name}{target}"
-        print(ref_str)
         ref = parse_normalized_named(ref_str)
         assert image_client.repo_tag(ref) == want
