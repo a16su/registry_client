@@ -42,7 +42,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Tool
         run: |
-          export PYTHON_KEYRING_BACKEND=keyring.backends.fail.Keyring
           python -m pip install -U pip
           python -m pip install poetry tox coverage
       - name: Setup Python
@@ -52,7 +51,9 @@ jobs:
           cache: "poetry"
 
       - name: Install Dep
-        run: poetry install
+        run: |
+          export PYTHON_KEYRING_BACKEND=keyring.backends.fail.Keyring
+          poetry install
 
       - name: Linter
         if: "matrix.use_linter"
