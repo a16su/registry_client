@@ -5,13 +5,28 @@ from typing import Any, Callable, Union
 
 import re2
 
-DIGEST_REGEX = re2.compile(r"sha(256|384|512):[a-z0-9]{64}")
+from registry_client import errors
+
+DIGEST_REGEX = re2.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}")
+
+DIGEST_SIZE = {
+    "sha256": 32,
+    "sha384": 48,
+    "sha512": 64,
+}
 
 
 class Algorithm(Enum):
     SHA384 = "sha384"
     SHA512 = "sha512"
     SHA256 = "sha256"
+
+    def validate(self, encode: str):
+        size = DIGEST_SIZE[self.value] * 2
+        if size != len(encode):
+            raise errors.ErrDigestInvalidLength()
+        if not re2.findall(f"^[a-f0-9]{{{size},}}$", encode):
+            return errors.ErrDigestInvalidFormat()
 
 
 DEFAULT_ALGORITHM = Algorithm.SHA256
@@ -69,7 +84,18 @@ class Digest(UserString):
     def is_digest(cls, value: Union[str, "Digest"]):
         if isinstance(value, Digest):
             return True
-        return DIGEST_REGEX.match(value)
+        index = value.find(":")
+        if index == -1 or index == len(value) - 1:
+            raise errors.ErrDigestInvalidFormat()
+        match = DIGEST_REGEX.findall(value)
+        if not match:
+            raise errors.ErrDigestInvalidFormat()
+        algm, hex_value = match[0].split(":", 1)
+        a: Algorithm = Algorithm._value2member_map_.get(algm)
+        if not a:
+            raise errors.ErrDigestUnsupported()
+        a.validate(hex_value)
+        return True
 
     def validate_bytes(self, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
         new_digest = self.from_bytes(content, algorithm)

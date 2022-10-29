@@ -67,8 +67,3 @@ class Platform(BaseModel):
 
     def __ne__(self, other):
         return not self.__eq__(other)
-
-
-if __name__ == "__main__":
-    # print(Platform(os="Linux", architecture="x86_64", variant=""))
-    print(Arch("x86_64").value)

@@ -24,11 +24,7 @@ from registry_client.export import TarImageDir
 from registry_client.manifest import ManifestClient, ManifestIndex, ManifestList
 from registry_client.media_types import ImageMediaType
 from registry_client.platforms import Platform
-from registry_client.reference import (
-    DigestReference,
-    Reference,
-    Repository,
-)
+from registry_client.reference import DigestReference, Reference, NamedReference, TaggedReference, CanonicalReference
 from registry_client.scope import RepositoryScope
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 
@@ -57,12 +53,12 @@ class BlobClient:
     def _send_req(
         self,
         method: Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
-        ref: DigestReference,
+        ref: CanonicalReference,
         actions: List[str],
         params: Optional[Dict] = None,
         body: Optional[Dict] = None,
     ) -> Union[Iterable[httpx.Response], httpx.Response]:
-        if not ref.is_named_digested:
+        if not isinstance(ref, CanonicalReference):
             raise Exception("reference must be a digest")
         scope = RepositoryScope(ref.path, actions=actions)
         url = f"/v2/{ref.path}/blobs/{ref.digest}"
@@ -70,14 +66,14 @@ class BlobClient:
             return self.client.stream("GET", url=url, auth=scope, params=params)
         return self.client.request(method, url=url, auth=scope, params=params, json=body)
 
-    def get(self, ref: DigestReference, stream=False) -> Union[Iterable[httpx.Response], httpx.Response]:
+    def get(self, ref: CanonicalReference, stream=False) -> Union[Iterable[httpx.Response], httpx.Response]:
         method = "STREAM" if stream else "GET"
         return self._send_req(method=method, ref=ref, actions=["pull"])
 
-    def delete(self, ref: DigestReference) -> httpx.Response:
+    def delete(self, ref: CanonicalReference) -> httpx.Response:
         return self._send_req("DELETE", ref=ref, actions=["pull"])
 
-    def head(self, ref: DigestReference) -> httpx.Response:
+    def head(self, ref: CanonicalReference) -> httpx.Response:
         return self._send_req(method="HEAD", ref=ref, actions=["pull"])
 
 
@@ -87,19 +83,21 @@ class ImageClient:
         self._blob_client = BlobClient(client)
         self._manifest_client = ManifestClient(client)
 
-    def repo_tag(self, reference: Reference):
+    def repo_tag(self, reference: TaggedReference):
         assert reference != ""
-        if isinstance(reference, DigestReference):
+        if isinstance(reference, (CanonicalReference, DigestReference)):
             return None
-        target = reference.tag
-        result = reference.repository.path.split("/", 1)
+        if isinstance(reference, NamedReference):
+            reference = TaggedReference(reference.domain, reference.path, "latest")
+        target = reference.target
+        result = reference.path.split("/", 1)
         if self.client.base_url.netloc.decode() == DEFAULT_REGISTRY_HOST:
             if len(result) == 2 and result[0] == DEFAULT_REPO:
                 return f"{result[-1]}:{target}"
             return f"{reference.path}:{target}"
         return str(reference)
 
-    def list_tag(self, ref: Repository, limit: Optional[int] = None, last: Optional[str] = None) -> httpx.Response:
+    def list_tag(self, ref: NamedReference, limit: Optional[int] = None, last: Optional[str] = None) -> httpx.Response:
         name = ref.path
         scope = RepositoryScope(repo_name=name, actions=["pull"])
         params = {}
@@ -111,13 +109,13 @@ class ImageClient:
 
     def _tar_layers(
         self,
-        reference: Reference,
+        reference: Union[TaggedReference, CanonicalReference, DigestReference],
         image_config: requests.Response,
         layers_file_list: List[pathlib.Path],
         layers_dir: pathlib.Path,
         options: ImagePullOptions,
     ):
-        target = reference.tag or reference.digest.short
+        target = reference.target
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
         with layers_dir.joinpath(f"{image_config_digest.hex}.json").open("w", encoding="utf-8") as f:
@@ -133,11 +131,11 @@ class ImageClient:
                     "Layers": [path.name for path in layers_file_list],
                 }
                 json.dump([data], f)
-            image_save_path = options.save_dir.joinpath(f"{reference.repository.name().replace('/', '_')}_{target}.tar")
+            image_save_path = options.save_dir.joinpath(f"{reference.name.replace('/', '_')}_{target}.tar")
             TarImageDir(src_dir=layers_dir, target_path=image_save_path).do()
             return image_save_path
 
-    def _get_manifest(self, resp: httpx.Response, ref: DigestReference, platform: Platform = None) -> ManifestIndex:
+    def _get_manifest(self, resp: httpx.Response, ref: CanonicalReference, platform: Platform = None) -> ManifestIndex:
         if resp.status_code == 404:
             raise ImageNotFoundError(ref)
         resp.raise_for_status()
@@ -147,7 +145,7 @@ class ImageClient:
         elif media_type == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
             manifest_list = ManifestList(**resp.json())
             digest = manifest_list.filter_by_platform(platform)
-            new_ref = DigestReference(ref.repository, digest=digest)
+            new_ref = CanonicalReference(ref.domain, ref.path, digest=digest)
             resp = self._manifest_client.get(new_ref)
             return self._get_manifest(resp, ref, platform)
         else:
@@ -157,19 +155,19 @@ class ImageClient:
         if not options.save_dir.exists():
             options.save_dir.mkdir(parents=True)
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
-        if ref.digest:
+        if isinstance(ref, (DigestReference, CanonicalReference)):
             manifest_digest = ref.digest
         else:
             manifest_content_digest_resp: httpx.Response = self._manifest_client.head(ref)
             if manifest_content_digest_resp.status_code != 200:
                 raise ImageNotFoundError(ref)
-            manifest_digest = manifest_content_digest_resp.headers.get("docker-content-digest")
+            manifest_digest = Digest(manifest_content_digest_resp.headers.get("docker-content-digest"))
             if manifest_digest is None:
                 manifest_digest = Digest.from_bytes(manifest_content_digest_resp.content)
-        r = DigestReference(ref.repository, digest=manifest_digest)
+        r = CanonicalReference(ref.domain, ref.path, digest=manifest_digest)
         manifest_content_resp = self._manifest_client.get(r)
         manifest = self._get_manifest(manifest_content_resp, r, options.platform)
-        image_digest = DigestReference(r.repository, digest=manifest.config.digest)
+        image_digest = CanonicalReference(ref.domain, ref.path, digest=manifest.config.digest)
         image_config = self.get_image_config(image_digest)
         logger.info(image_config.text)
         logger.info(manifest)
@@ -179,7 +177,7 @@ class ImageClient:
             is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
             with open(layer_path, "wb") as f:
                 with self._blob_client.get(
-                    DigestReference(image_digest.repository, digest=one_layer.digest), stream=True
+                    CanonicalReference(image_digest.domain, image_digest.path, digest=one_layer.digest), stream=True
                 ) as resp:
                     if is_gzip:
                         if resp.headers.get("Content-Encoding") is None:
@@ -194,8 +192,6 @@ class ImageClient:
             layers_dir=pathlib.Path(tmp_dir.name),
             options=options,
         )
-        # logger.info(f"image save to {image_path}")
-        # return image_path
         return image_path
 
     @classmethod
@@ -212,6 +208,6 @@ class ImageClient:
     def delete_manifest(self):
         pass
 
-    def get_image_config(self, ref: DigestReference):
+    def get_image_config(self, ref: CanonicalReference):
         resp = self._blob_client.get(ref)
         return resp

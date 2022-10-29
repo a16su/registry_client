@@ -66,7 +66,6 @@ def docker_registry_client(pytestconfig: pytest.Config) -> RegistryClient:
         info_from_env["username"] = username
     if password:
         info_from_env["password"] = password
-    print(info_from_env)
     return RegistryClient(**info_from_env)
 
 
