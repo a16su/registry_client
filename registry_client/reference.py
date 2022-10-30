@@ -218,7 +218,7 @@ def split_docker_domain(name: str):
     if index == -1 or (not re2.findall(r"[.:]", name[:index]) and name[:index] != "localhost"):
         domain, remainder = DEFAULT_REGISTRY_HOST, name
     else:
-        domain, remainder = name[:index], name[index + 1:]
+        domain, remainder = name[:index], name[index + 1 :]
     if domain == "index.docker.io":
         domain = DEFAULT_REGISTRY_HOST
     if domain == DEFAULT_REGISTRY_HOST and "/" not in remainder:

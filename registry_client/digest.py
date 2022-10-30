@@ -2,10 +2,9 @@ import hashlib
 from collections import UserString
 from enum import Enum
 from typing import Any, Callable, Union
-
 import re2
-
 from registry_client import errors
+
 
 DIGEST_REGEX = re2.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}")
 
