@@ -5,6 +5,8 @@ from typing import Optional
 from pydantic import BaseModel
 
 DEFAULT_SYSTEM = platform.system().lower()
+if DEFAULT_SYSTEM == "windows":
+    DEFAULT_SYSTEM = "linux"
 DEFAULT_MACHINE = platform.machine().lower()
 
 
