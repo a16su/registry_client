@@ -4,13 +4,13 @@
 import pathlib
 from typing import Optional
 
+from pydantic import BaseModel
 from typer import Argument, BadParameter, Context, Exit, Option, Typer, echo
 
 from registry_client.client import RegistryClient
 from registry_client.image import ImageFormat
 from registry_client.platforms import OS, Arch, Platform
-from registry_client.reference import Reference
-from registry_client.utlis import parse_normalized_named
+from registry_client.reference import Reference, parse_normalized_named, NamedReference
 
 app = Typer(name="registry_client")
 
@@ -54,14 +54,26 @@ def platform_complete(incomplete: str):
 
 def image_name_callback(name: str):
     ref = parse_normalized_named(name)
-    if not isinstance(ref, Reference):
-        raise BadParameter("No tag or digest allowed in reference")
     return ref
 
 
 image_name_option = Argument(
     help="image name, like: hello-world:latest|library/hello-world:latest", default=..., callback=image_name_callback
 )
+
+
+def new_client(ref: Reference) -> RegistryClient:
+    global_options: "GlobalOptions" = Context.global_options
+    scheme = "https"
+    if global_options.plain_http:
+        scheme = "http"
+    domain = ref.domain or "registry-1.docker.io"
+    return RegistryClient(
+        host=f"{scheme}://{domain}",
+        username=global_options.username,
+        password=global_options.password,
+        skip_verify=global_options.ignore_cert_error,
+    )
 
 
 @app.command("list-tags")
@@ -71,9 +83,10 @@ def list_tags(
     last: str = Option(default=None, help="the last tag for pagination"),
 ):
     ref: Reference = name
-    new_registry = Registry(client=Context.client, host=f"https://{ref.repository.domain}", **Context.auth_info)
-    image = new_registry.image(ref.repository.path)
-    tags = image.get_tags(limit=limit, last=last)
+    if not isinstance(ref, NamedReference):
+        raise BadParameter("No tag or digest allowed in reference")
+    client = new_client(ref)
+    tags = client.list_tags(image_name=str(ref), limit=limit, last=last)
     echo(tags)
 
 
@@ -86,8 +99,6 @@ def pull_image(
     image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
     save_to: pathlib.Path = Option(..., help="save image to which dir"),
     just_download: bool = Option(False, help="just download image config and layer, don't tar them to image"),
-    plain_http: bool = Option(False, help="allow connections using plain HTTP"),
-    skip_verify: bool = Option(False, help="skip SSL certificate validation"),
 ):
     want_platform: Optional[Platform] = platform
     if save_to.exists() and not save_to.is_dir():
@@ -115,12 +126,21 @@ def tar_to_image(
         assert config_json.exists() and config_json.is_file()
 
 
+class GlobalOptions(BaseModel):
+    ignore_cert_error: bool = False
+    plain_http: bool = False
+    username: str = ""
+    password: str = ""
+
+
 @app.callback()
 def main(
     version: Optional[bool] = Option(None, "--version", callback=version_callback, is_eager=True),
     ignore_cert_error: bool = Option(False, help="either ignore server cert error"),
+    plain_http: bool = Option(False, help="allow connections using plain HTTP"),
     username: str = Option("", help="registry username"),
     password: str = Option("", help="registry password", hide_input=True),
 ):
-    Context.client = RegistryClient(verify=not ignore_cert_error)
-    Context.auth_info = {"username": username, "password": password}
+    Context.global_options = GlobalOptions(
+        ignore_cert_error=ignore_cert_error, plain_http=plain_http, username=username, password=password
+    )

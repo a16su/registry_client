@@ -15,7 +15,9 @@ class RegistryClient:
     def __init__(self, host="https://registry-1.docker.io", username: str = "", password: str = "", skip_verify=False):
         self._username = username
         self._password = password
-        self.client = AuthClient(base_url=host, auth=(username, password), verify=not skip_verify)
+        self.client = AuthClient(
+            base_url=host, auth=(username, password), verify=not skip_verify, follow_redirects=True
+        )
         self._registry_client = RepoClient(self.client)
 
     def catalog(self, count: int = None, last: str = None):
