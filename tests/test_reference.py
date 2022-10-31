@@ -4,7 +4,7 @@
 from typing import List, Optional, Dict
 
 import pytest
-import re2
+import re
 
 from registry_client import reference, errors
 from registry_client.reference import TaggedReference, NamedReference
@@ -62,7 +62,7 @@ def check_regexp(reg, value: str, match: bool, result: Optional[List[str]] = Non
     ),
 )
 def test_domain_regexp(value: str, match: bool):
-    reg = re2.compile(f"^{reference.DOMAIN_REGEXP.pattern}$")
+    reg = re.compile(f"^{reference.DOMAIN_REGEXP.pattern}$")
     check_regexp(reg, value, match)
 
 

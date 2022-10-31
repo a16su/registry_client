@@ -2,11 +2,11 @@ import hashlib
 from collections import UserString
 from enum import Enum
 from typing import Any, Callable, Union
-import re2
+import re
 from registry_client import errors
 
 
-DIGEST_REGEX = re2.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}")
+DIGEST_REGEX = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][a-fA-F0-9]{32,}")
 
 DIGEST_SIZE = {
     "sha256": 32,
@@ -24,7 +24,7 @@ class Algorithm(Enum):
         size = DIGEST_SIZE[self.value] * 2
         if size != len(encode):
             raise errors.ErrDigestInvalidLength()
-        if not re2.findall(f"^[a-f0-9]{{{size},}}$", encode):
+        if not re.findall(f"^[a-f0-9]{{{size},}}$", encode):
             return errors.ErrDigestInvalidFormat()
 
 

@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
 
-import re2
+import re
 
 from registry_client import errors
 from registry_client.digest import Digest
@@ -63,33 +63,33 @@ domain = expression(
     host,
     optional(literal(":"), r"[0-9]+"),
 )
-DOMAIN_REGEXP = re2.compile(domain)
+DOMAIN_REGEXP = re.compile(domain)
 
 tag = r"[\w][\w.-]{0,127}"
-TAG_REGEXP = re2.compile(tag)
+TAG_REGEXP = re.compile(tag)
 
-ANCHORED_TAG_REGEXP = re2.compile(anchored(tag))
+ANCHORED_TAG_REGEXP = re.compile(anchored(tag))
 
-DIGEST_REGEXP = re2.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][[:xdigit:]]{32,}")
-ANCHORED_DIGEST_REGEXP = re2.compile(anchored(DIGEST_REGEXP.pattern))
+DIGEST_REGEXP = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][a-fA-F0-9]{32,}")
+ANCHORED_DIGEST_REGEXP = re.compile(anchored(DIGEST_REGEXP.pattern))
 
 name_pat = expression(optional(domain, literal("/")), name_component, optional(repeated(literal("/"), name_component)))
 anchored_name = anchored(
     optional(capture(domain), literal("/")),
     capture(name_pat, optional(repeated(literal("/"), name_pat))),
 )
-NAME_REGEXP = re2.compile(name_pat)
-ANCHORED_NAME_REGEXP = re2.compile(anchored_name)
+NAME_REGEXP = re.compile(name_pat)
+ANCHORED_NAME_REGEXP = re.compile(anchored_name)
 
 reference_pat = anchored(
     capture(name_pat), optional(literal(":"), capture(tag)), optional(literal("@"), capture(DIGEST_REGEXP.pattern))
 )
-REFERENCE_REGEXP = re2.compile(reference_pat)
+REFERENCE_REGEXP = re.compile(reference_pat)
 
-IDENTIFIER_REGEXP = re2.compile(r"([a-f0-9]{64})")
-SHORT_IDENTIFIER_REGEXP = re2.compile(r"([a-f0-9]{6,64})")
-ANCHORED_IDENTIFIER_REGEXP = re2.compile(anchored(IDENTIFIER_REGEXP.pattern))
-ANCHORED_SHORT_IDENTIFIER_REGEXP = re2.compile(anchored(SHORT_IDENTIFIER_REGEXP.pattern))
+IDENTIFIER_REGEXP = re.compile(r"([a-f0-9]{64})")
+SHORT_IDENTIFIER_REGEXP = re.compile(r"([a-f0-9]{6,64})")
+ANCHORED_IDENTIFIER_REGEXP = re.compile(anchored(IDENTIFIER_REGEXP.pattern))
+ANCHORED_SHORT_IDENTIFIER_REGEXP = re.compile(anchored(SHORT_IDENTIFIER_REGEXP.pattern))
 
 
 @dataclass
@@ -215,7 +215,7 @@ def parse(name: str) -> Reference:
 
 def split_docker_domain(name: str):
     index = name.find("/")
-    if index == -1 or (not re2.findall(r"[.:]", name[:index]) and name[:index] != "localhost"):
+    if index == -1 or (not re.findall(r"[.:]", name[:index]) and name[:index] != "localhost"):
         domain, remainder = DEFAULT_REGISTRY_HOST, name
     else:
         domain, remainder = name[:index], name[index + 1 :]
@@ -234,7 +234,7 @@ def split_domain(name: str):
 
 
 def parse_normalized_named(name: str) -> Reference:
-    if re2.match(r"^([a-f0-9]{64})$", name):
+    if re.match(r"^([a-f0-9]{64})$", name):
         raise Exception(f"invalid repository name ({name}), cannot specify 64-byte hexadecimal strings")
     domain, remainder = split_docker_domain(name)
     if remainder.find(":") != -1:

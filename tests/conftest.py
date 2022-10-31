@@ -56,8 +56,8 @@ def docker_registry_client(pytestconfig: pytest.Config) -> RegistryClient:
     ignore_cert_error = pytestconfig.option.ignore_cert_error
     info_from_env = {
         "host": os.environ.get("REGISTRY_HOST"),
-        "username": os.environ.get("REGISTRY_USERNAME"),
-        "password": os.environ.get("REGISTRY_PASSWORD"),
+        "username": os.environ.get("REGISTRY_USERNAME", ""),
+        "password": os.environ.get("REGISTRY_PASSWORD", ""),
         "skip_verify": ignore_cert_error,
     }
     if host:
