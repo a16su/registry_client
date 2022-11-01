@@ -70,7 +70,7 @@ class ManifestClient:
         scope = RepositoryScope(ref.path, actions=["pull"])
         target = ref.target
         url = f"/v2/{ref.path}/manifests/{target}"
-        return self.client.request(method, url, auth=self.client.new_auth(scope=scope))
+        return self.client.request(method, url, auth=self.client.new_auth(auth_by=scope))
 
     def head(self, ref: Reference) -> httpx.Response:
         return self._send_request("HEAD", ref)

@@ -63,8 +63,8 @@ class BlobClient:
         scope = RepositoryScope(ref.path, actions=actions)
         url = f"/v2/{ref.path}/blobs/{ref.digest}"
         if method == "STREAM":
-            return self.client.stream("GET", url=url, auth=self.client.new_auth(scope=scope), params=params)
-        return self.client.request(method, url=url, auth=self.client.new_auth(scope=scope), params=params, json=body)
+            return self.client.stream("GET", url=url, auth=self.client.new_auth(auth_by=scope), params=params)
+        return self.client.request(method, url=url, auth=self.client.new_auth(auth_by=scope), params=params, json=body)
 
     def get(self, ref: CanonicalReference, stream=False) -> Union[Iterable[httpx.Response], httpx.Response]:
         method = "STREAM" if stream else "GET"
@@ -105,7 +105,7 @@ class ImageClient:
             params["n"] = limit
         if last:
             params["last"] = last
-        return self.client.get(f"/v2/{name}/tags/list", auth=self.client.new_auth(scope=scope), params=params)
+        return self.client.get(f"/v2/{name}/tags/list", auth=self.client.new_auth(auth_by=scope), params=params)
 
     def _tar_layers(
         self,

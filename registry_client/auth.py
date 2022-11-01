@@ -5,7 +5,9 @@ import base64
 import datetime
 import sys
 from enum import Enum
-from typing import Dict, NamedTuple, Optional, Union
+from typing import Dict, NamedTuple, Optional, Union, Tuple
+
+from pydantic import BaseModel
 
 if sys.version_info >= (3, 8):
     from typing import Literal
@@ -48,10 +50,13 @@ class Token:
         raise NotImplementedError
 
 
-class EmptyToken(Token):
+class FakeToken(Token):
+    def __init__(self, token: Dict[str, str]):
+        self._token = token
+
     @property
     def token(self) -> Dict[str, str]:
-        return {}
+        return self._token
 
 
 class BasicToken(Token):
@@ -65,18 +70,27 @@ class BasicToken(Token):
         return self._auth_header
 
 
+class BearerTokenResp(BaseModel):
+    token: str
+    access_token: str
+    expires_in: int
+    issued_at: str
+
+
 class BearerToken(Token):
     def __init__(self, resp: requests.Response):
-        resp_dict = resp.json()
-        self._token: str = resp_dict["token"]
-        _expires_in: datetime.timedelta = datetime.timedelta(seconds=resp_dict["expires_in"])
-        _issued_at = iso8601.parse_date(resp_dict["issued_at"])
+        token_resp = BearerTokenResp(**resp.json())
+        _expires_in: datetime.timedelta = datetime.timedelta(seconds=token_resp.expires_in)
+        _issued_at = iso8601.parse_date(token_resp.issued_at)
         self._expired_at = _expires_in + _issued_at
-        self.access_token: Optional[str] = resp_dict["access_token"]
+        self.access_token: Optional[str] = token_resp.access_token
+        self._token = token_resp.token
 
     @property
     def token(self):
         token = self.access_token or self._token
+        if not token:
+            raise Exception("expect token in response")
         return {"Authorization": f"Bearer {token}"}
 
     @property
@@ -103,15 +117,18 @@ def parse_challenge(auth_header: str) -> RegistryChallenge:
         header_dict[key] = unquote(value)
     try:
         realm = header_dict["realm"].strip('"')
-        service = header_dict.get("service").strip('"')
+        service = header_dict.get("service", "").strip('"')
         scope = header_dict.get("scope", None)
+        if scope:
+            scope = scope.strip('"')
         return RegistryChallenge(scheme=scheme, realm=realm, service=service, scope=scope)
     except KeyError as exc:
-        raise Exception("Malformed Bearer WWW-Authenticate header") from exc
+        raise KeyError(f"Malformed Bearer WWW-Authenticate header: missing key {exc}")
 
 
 class BearerAuth(httpx.Auth):
     def __init__(self, username: str, password: str, challenge: RegistryChallenge, scope: Scope):
+        assert challenge.scheme == ChallengeScheme.Bearer
         self._username = username
         self._password = password
         token = base64.b64encode(f"{self._username}:{self._password}".encode()).decode()
@@ -166,6 +183,14 @@ class AuthClient(httpx.Client):
         self.__challenge: Optional[RegistryChallenge] = None
         self.event_hooks = {"request": [request_hook], "response": [response_hook]}
 
+    @property
+    def need_auth(self) -> bool:
+        return self.__need_auth
+
+    @property
+    def challenge(self) -> RegistryChallenge:
+        return self.__challenge
+
     def ping(self):
         c = httpx.Client(base_url=self.base_url)
         resp = c.get("/v2/")
@@ -176,15 +201,19 @@ class AuthClient(httpx.Client):
             return
         self.__challenge = parse_challenge(auth_header=_auth_header)
 
-    def new_auth(self, auth_type: Literal["password", "scope"] = "scope", scope: Optional[Scope] = None) -> httpx.Auth:
-        if not self.__need_auth:
+    def new_auth(self, auth_by: Optional[Union[Tuple[str, str], Scope]] = None) -> httpx.Auth:
+        if auth_by is None:
             return httpx.Auth()
         if self.__challenge is None:
             self.ping()
-        if auth_type == "password":
-            return httpx.BasicAuth(self._username, self._password)
-        assert scope
-        return BearerAuth(self._username, self._password, self.__challenge, scope)
+        if not self.__need_auth:
+            return httpx.Auth()
+        if isinstance(auth_by, tuple):
+            return httpx.BasicAuth(*auth_by)
+        elif isinstance(auth_by, Scope):
+            logger.info(self.__challenge)
+            return BearerAuth(self._username, self._password, self.__challenge, auth_by)
+        return httpx.Auth()
 
     def _build_auth(self, auth: Optional[httpx._types.AuthTypes]) -> Optional[httpx.Auth]:
         if not self.__need_auth:

@@ -20,5 +20,9 @@ class RepoClient:
             params["n"] = count
         if last:
             params["last"] = str(last)
-        resp = self.client.get(url="/v2/_catalog", params=params, auth=self.client.new_auth(auth_type="password"))
+        resp = self.client.get(
+            url="/v2/_catalog",
+            params=params,
+            auth=self.client.new_auth(auth_by=(self.client._username, self.client._password)),
+        )
         return resp
