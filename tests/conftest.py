@@ -1,9 +1,13 @@
 import os
 import shutil
+from typing import NamedTuple
 
 import docker
+import httpx
+import respx
 import pytest
 
+from registry_client.auth import encode_auth, AuthClient
 from registry_client.client import RegistryClient
 from registry_client.digest import Digest
 from registry_client.image import BlobClient, ImageClient
@@ -11,6 +15,10 @@ from registry_client.manifest import ManifestClient
 from registry_client.repo import RepoClient
 from tests.docker_hub_client import DockerHubClient
 from tests.local_docker import LocalDockerChecker
+
+FAKE_REGISTRY_AUTH_HOST = "https://auth-test.registrt-fake.yy"
+FAKE_REGISTRY_USERNAME = "foo"
+FAKE_REGISTRY_PASSWORD = "bar"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -48,8 +56,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+class RegistryInfo(NamedTuple):
+    host: str
+    username: str = ""
+    password: str = ""
+
+
 @pytest.fixture(scope="session")
-def docker_registry_client(pytestconfig: pytest.Config) -> RegistryClient:
+def registry_info(pytestconfig: pytest.Config) -> RegistryInfo:
     host = pytestconfig.option.registry_host
     username = pytestconfig.option.registry_username
     password = pytestconfig.option.registry_password
@@ -66,7 +80,23 @@ def docker_registry_client(pytestconfig: pytest.Config) -> RegistryClient:
         info_from_env["username"] = username
     if password:
         info_from_env["password"] = password
-    return RegistryClient(**info_from_env)
+    return RegistryInfo(
+        host=info_from_env["host"], username=info_from_env["username"], password=info_from_env["password"]
+    )
+
+
+@pytest.fixture(scope="session")
+def docker_registry_client(registry_info) -> RegistryClient:
+    return RegistryClient(host=registry_info.host, username=registry_info.username, password=registry_info.password)
+
+
+@pytest.fixture(scope="function")
+def auth_client(request: pytest.FixtureRequest, registry_info):
+    info = registry_info._asdict()
+    info_from_param = request.node.get_closest_marker("registry_info", default=None)
+    if info_from_param:
+        info.update(info_from_param)
+    return AuthClient(base_url=info["host"], auth=(info["username"], info["password"]))
 
 
 @pytest.fixture(scope="session")
@@ -121,3 +151,54 @@ def image_checker():
 @pytest.fixture(scope="function")
 def random_digest():
     return Digest.from_bytes(os.urandom(1))
+
+
+@pytest.fixture(scope="session")
+def registry_mock(registry_info):
+    global FAKE_REGISTRY_USERNAME
+    global FAKE_REGISTRY_PASSWORD
+    FAKE_REGISTRY_USERNAME = registry_info.username
+    FAKE_REGISTRY_PASSWORD = registry_info.password
+    with respx.mock(base_url=registry_info.host, assert_all_mocked=False, assert_all_called=False) as registry_mock:
+        yield registry_mock
+
+
+@pytest.fixture(scope="session")
+def registry_auth_mock(registry_info):
+    with respx.mock(base_url=FAKE_REGISTRY_AUTH_HOST) as registry_auth_mock:
+        yield registry_auth_mock
+
+
+@pytest.fixture(scope="session")
+def registry_auth_root(registry_auth_mock):
+    return registry_auth_mock.route(method="GET", path="/", name="root")
+
+
+@pytest.fixture(scope="function")
+def auth_request_checker(registry_auth_root):
+    def side_effect_gen(return_value, username="", password="", scope="", service="", no_need_auth=False, check=True):
+        def side_effect(request_in: httpx.Request) -> httpx.Response:
+            if not check:
+                return return_value
+            auth = request_in.headers.get("Authorization")
+            if no_need_auth:
+                assert auth is None
+            else:
+                assert auth == f"Basic {encode_auth(username, password)}"
+            params = request_in.url.params
+            if scope:
+                assert params.get("scope") == str(scope)
+            if username:
+                assert params.get("account") == username
+            if service:
+                assert params.get("service") == service
+            return return_value
+
+        registry_auth_root.side_effect = side_effect
+
+    return side_effect_gen
+
+
+@pytest.fixture(scope="function")
+def registry_v2(registry_mock):
+    yield registry_mock.route(path="/v2/", method="GET", name="v2")
