@@ -153,7 +153,7 @@ def random_digest():
     return Digest.from_bytes(os.urandom(1))
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def registry_mock(registry_info):
     global FAKE_REGISTRY_USERNAME
     global FAKE_REGISTRY_PASSWORD
@@ -163,13 +163,13 @@ def registry_mock(registry_info):
         yield registry_mock
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def registry_auth_mock(registry_info):
     with respx.mock(base_url=FAKE_REGISTRY_AUTH_HOST) as registry_auth_mock:
         yield registry_auth_mock
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def registry_auth_root(registry_auth_mock):
     return registry_auth_mock.route(method="GET", path="/", name="root")
 
