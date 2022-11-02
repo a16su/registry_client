@@ -210,8 +210,9 @@ class AuthClient(httpx.Client):
             return httpx.Auth()
         if isinstance(auth_by, tuple):
             return httpx.BasicAuth(*auth_by)
-        elif isinstance(auth_by, Scope):
-            logger.info(self.__challenge)
+        elif self.challenge.scheme == ChallengeScheme.Basic:
+            return httpx.BasicAuth(self._username, self._password)
+        elif self.challenge.scheme == ChallengeScheme.Bearer and isinstance(auth_by, Scope):
             return BearerAuth(self._username, self._password, self.__challenge, auth_by)
         return httpx.Auth()
 

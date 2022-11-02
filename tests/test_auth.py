@@ -232,6 +232,11 @@ class TestBearerAuth:
         auth_request_checker(no_need_auth=True, return_value=return_value)
         req = flow.send(resp)
 
+    def test_error_challenge_scheme(self):
+        challenge = RegistryChallenge(ChallengeScheme.Basic, realm="http://example.com")
+        with pytest.raises(AssertionError):
+            b = BearerAuth("", "", challenge=challenge, scope=EmptyScope())
+
 
 @pytest.mark.parametrize(
     "header, scheme, realm, service, scope, exception",
@@ -287,16 +292,20 @@ class TestAuthClient:
         assert client.need_auth is need_auth
 
     @pytest.mark.parametrize(
-        "auth_by, want_auth_type",
+        "challenge_scheme, auth_by, want_auth_type",
         (
-            (("", ""), httpx.BasicAuth),
-            (EmptyScope(), BearerAuth),
-            (None, httpx.Auth),
-            (1, httpx.Auth),
+            ("Bearer", ("", ""), httpx.BasicAuth),
+            ("Bearer", EmptyScope(), BearerAuth),
+            ("Bearer", None, httpx.Auth),
+            ("Bearer", 1, httpx.Auth),
+            ("Basic", ("", ""), httpx.BasicAuth),
+            ("Basic", EmptyScope(), httpx.BasicAuth),
+            ("Basic", None, httpx.Auth),
+            ("Basic", 1, httpx.BasicAuth),
         ),
     )
-    def test_new_auth(self, auth_client, auth_by, want_auth_type, registry_v2, monkeypatch):
-        registry_v2.respond(headers={"www-authenticate": "Bearer realm='http://example.com'"})
+    def test_new_auth(self, auth_client, challenge_scheme, auth_by, want_auth_type, registry_v2, monkeypatch):
+        registry_v2.respond(headers={"www-authenticate": f"{challenge_scheme} realm='http://example.com'"})
         auther = auth_client.new_auth(auth_by=auth_by)
         assert auth_client.need_auth
         assert auther.__class__ == want_auth_type
@@ -305,11 +314,6 @@ class TestAuthClient:
         auth_client.ping()
         assert not auth_client.need_auth
         assert auth_client.new_auth(EmptyScope()).__class__ == httpx.Auth
-
-    def test_bad_auth_by(self, registry_info, auth_client, registry_v2):
-        registry_v2.respond(headers={"www-authenticate": "Basic realm='http://example.com'"}, json={"test": 1})
-        with pytest.raises(AssertionError):
-            auth_client.new_auth(auth_by=EmptyScope())
 
     def test_build_auth_by_tuple(self):
         client = AuthClient(auth=("foo", "bar"))
