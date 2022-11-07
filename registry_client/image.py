@@ -2,6 +2,7 @@
 # encoding: utf-8
 import json
 import pathlib
+import re
 import sys
 import tempfile
 from dataclasses import dataclass, field
@@ -20,11 +21,17 @@ from loguru import logger
 from registry_client.auth import AuthClient
 from registry_client.digest import Digest
 from registry_client.errors import ImageNotFoundError
-from registry_client.export import TarImageDir
+from registry_client.export import ImageV2Tar, TarImageDir
 from registry_client.manifest import ManifestClient, ManifestIndex, ManifestList
 from registry_client.media_types import ImageMediaType
 from registry_client.platforms import Platform
-from registry_client.reference import DigestReference, Reference, NamedReference, TaggedReference, CanonicalReference
+from registry_client.reference import (
+    CanonicalReference,
+    DigestReference,
+    NamedReference,
+    Reference,
+    TaggedReference,
+)
 from registry_client.scope import RepositoryScope
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 
@@ -52,9 +59,9 @@ class BlobClient:
 
     def _send_req(
         self,
-        method: Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
         ref: CanonicalReference,
         actions: List[str],
+        method: str = Literal["GET", "STREAM", "DELETE", "HEAD", "POST"],
         params: Optional[Dict] = None,
         body: Optional[Dict] = None,
     ) -> Union[Iterable[httpx.Response], httpx.Response]:
@@ -71,7 +78,7 @@ class BlobClient:
         return self._send_req(method=method, ref=ref, actions=["pull"])
 
     def delete(self, ref: CanonicalReference) -> httpx.Response:
-        return self._send_req("DELETE", ref=ref, actions=["pull"])
+        return self._send_req(method="DELETE", ref=ref, actions=["pull"])
 
     def head(self, ref: CanonicalReference) -> httpx.Response:
         return self._send_req(method="HEAD", ref=ref, actions=["pull"])
@@ -114,12 +121,13 @@ class ImageClient:
         layers_file_list: List[pathlib.Path],
         layers_dir: pathlib.Path,
         options: ImagePullOptions,
-    ):
+    ) -> pathlib.Path:
         target = reference.target
+        image_save_path = options.save_dir.joinpath(f"{re.sub(r'[.:/]', '_', reference.name)}_{target}.tar")
         assert layers_dir.exists() and layers_dir.is_dir()
         image_config_digest = Digest.from_bytes(image_config.content)
-        with layers_dir.joinpath(f"{image_config_digest.hex}.json").open("w", encoding="utf-8") as f:
-            json.dump(image_config.json(), f)
+        with layers_dir.joinpath(f"{image_config_digest.hex}.json").open("wb") as f:
+            f.write(image_config.content)
 
         if options.image_format == ImageFormat.V2:
             with open(layers_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
@@ -128,12 +136,16 @@ class ImageClient:
                 data = {
                     "Config": f"{image_config_digest.hex}.json",
                     "RepoTags": repo_tags,
-                    "Layers": [path.name for path in layers_file_list],
+                    "Layers": [str(path) for path in layers_file_list],
                 }
                 json.dump([data], f)
-            image_save_path = options.save_dir.joinpath(f"{reference.name.replace('/', '_')}_{target}.tar")
-            TarImageDir(src_dir=layers_dir, target_path=image_save_path).do()
+
+            final_path = ImageV2Tar(src_dir=layers_dir, target_path=image_save_path, compress=options.compression).do()
+            return final_path
+        elif options.image_format == ImageFormat.OCI:
             return image_save_path
+        else:
+            raise Exception("invalid image format")
 
     def _get_manifest(self, resp: httpx.Response, ref: CanonicalReference, platform: Platform = None) -> ManifestIndex:
         if resp.status_code == 404:
@@ -155,6 +167,8 @@ class ImageClient:
         if not options.save_dir.exists():
             options.save_dir.mkdir(parents=True)
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
+        temp_dir_path = pathlib.Path(tmp_dir.name)
+        temp_dir_path.mkdir(exist_ok=True)
         if isinstance(ref, (DigestReference, CanonicalReference)):
             manifest_digest = ref.digest
         else:
@@ -173,7 +187,8 @@ class ImageClient:
         logger.info(manifest)
         layers_file_list = []
         for one_layer in manifest.layers:
-            layer_path = pathlib.Path(tmp_dir.name).joinpath(f"{one_layer.digest.hex}.tar")
+            layer_path = temp_dir_path.joinpath(f"{one_layer.digest.hex}/layer.tar")
+            layer_path.parent.mkdir(exist_ok=True)
             is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
             with open(layer_path, "wb") as f:
                 with self._blob_client.get(
@@ -184,12 +199,12 @@ class ImageClient:
                             resp.headers["content-encoding"] = "gzip"  # let httpx decode gzip
                     for content in resp.iter_bytes():
                         f.write(content)
-            layers_file_list.append(layer_path)
+            layers_file_list.append(layer_path.relative_to(temp_dir_path))
         image_path = self._tar_layers(
             ref,
             image_config=image_config,
             layers_file_list=layers_file_list,
-            layers_dir=pathlib.Path(tmp_dir.name),
+            layers_dir=temp_dir_path,
             options=options,
         )
         return image_path
