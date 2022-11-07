@@ -10,7 +10,7 @@ from typer import Argument, BadParameter, Context, Exit, Option, Typer, echo
 from registry_client.client import RegistryClient
 from registry_client.image import ImageFormat
 from registry_client.platforms import OS, Arch, Platform
-from registry_client.reference import Reference, parse_normalized_named, NamedReference
+from registry_client.reference import NamedReference, Reference, parse_normalized_named
 
 app = Typer(name="registry_client")
 

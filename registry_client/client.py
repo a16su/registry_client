@@ -7,7 +7,7 @@ from loguru import logger
 
 from registry_client.auth import AuthClient
 from registry_client.image import ImageClient
-from registry_client.reference import parse_normalized_named, NamedReference
+from registry_client.reference import NamedReference, parse_normalized_named
 from registry_client.repo import RepoClient
 
 
@@ -20,7 +20,7 @@ class RegistryClient:
         )
         self._registry_client = RepoClient(self.client)
 
-    def catalog(self, count: int = None, last: str = None):
+    def catalog(self, count: Optional[int] = None, last: Optional[str] = None):
         resp = self._registry_client.list(count, last)
         resp.raise_for_status()
         return resp.json().get("repositories", [])

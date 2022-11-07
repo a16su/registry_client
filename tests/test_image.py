@@ -7,11 +7,8 @@ import pytest
 from registry_client.errors import ImageNotFoundError
 from registry_client.image import ImageClient, ImagePullOptions
 from registry_client.platforms import OS, Arch, Platform
-from registry_client.utlis import (
-    DEFAULT_REGISTRY_HOST,
-    DEFAULT_REPO,
-)
 from registry_client.reference import parse_normalized_named
+from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 from tests.local_docker import LocalDockerChecker
 
 DEFAULT_IMAGE_NAME = "library/hello-world"

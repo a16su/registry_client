@@ -4,24 +4,24 @@
 import base64
 import datetime
 import uuid
-from typing import Optional, Dict
+from typing import Optional
 
 import httpx
 import pytest
 
 from registry_client.auth import (
+    GLOBAL_TOKEN_CACHE,
+    TOKEN_CACHE_MIN_TIME,
+    AuthClient,
+    BasicToken,
+    BearerAuth,
+    BearerToken,
+    ChallengeScheme,
     FakeToken,
+    RegistryChallenge,
     Token,
     encode_auth,
-    BasicToken,
-    BearerToken,
-    TOKEN_CACHE_MIN_TIME,
-    GLOBAL_TOKEN_CACHE,
-    BearerAuth,
-    RegistryChallenge,
-    ChallengeScheme,
     parse_challenge,
-    AuthClient,
 )
 from registry_client.scope import EmptyScope, RepositoryScope
 from tests.conftest import FAKE_REGISTRY_AUTH_HOST

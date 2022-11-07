@@ -14,8 +14,7 @@ from registry_client.platforms import Platform
 class LocalDockerChecker:
     def __init__(self):
         self.client = docker.from_env()
-        self.client.images.list()
-        self.image: Image = None
+        self.image: Optional[Image] = None
 
     def check_load(self, image_path: pathlib.Path) -> "LocalDockerChecker":
         with image_path.open("rb") as f:

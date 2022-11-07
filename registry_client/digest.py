@@ -1,10 +1,10 @@
 import hashlib
+import re
 from collections import UserString
 from enum import Enum
 from typing import Any, Callable, Union
-import re
-from registry_client import errors
 
+from registry_client import errors
 
 DIGEST_REGEX = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][a-fA-F0-9]{32,}")
 
@@ -34,8 +34,8 @@ DEFAULT_ALGORITHM = Algorithm.SHA256
 class Digest(UserString):
     def __init__(self, seq):
         super(Digest, self).__init__(seq)
-        self._algorithm, self._hash = self.data.split(":")
-        self._algorithm = Algorithm(self._algorithm)
+        _algorithm, self._hash = self.data.split(":")
+        self._algorithm = Algorithm(_algorithm)
 
     @classmethod
     def __get_validators__(cls):

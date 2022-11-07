@@ -4,10 +4,10 @@ from typing import NamedTuple
 
 import docker
 import httpx
-import respx
 import pytest
+import respx
 
-from registry_client.auth import encode_auth, AuthClient
+from registry_client.auth import AuthClient, encode_auth
 from registry_client.client import RegistryClient
 from registry_client.digest import Digest
 from registry_client.image import BlobClient, ImageClient

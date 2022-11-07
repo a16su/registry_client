@@ -2,11 +2,10 @@
 # encoding : utf-8
 # create at: 2022/9/24-下午2:52
 # https://github.com/distribution/distribution/blob/main/reference/regexp.go
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
-
-import re
 
 from registry_client import errors
 from registry_client.digest import Digest

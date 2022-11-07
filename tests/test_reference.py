@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/10/28-下午7:57
-from typing import List, Optional, Dict
+import re
+from typing import Dict, List, Optional
 
 import pytest
-import re
 
-from registry_client import reference, errors
-from registry_client.reference import TaggedReference, NamedReference
+from registry_client import errors, reference
+from registry_client.reference import NamedReference, TaggedReference
 
 
 def check_regexp(reg, value: str, match: bool, result: Optional[List[str]] = None):

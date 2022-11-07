@@ -5,7 +5,7 @@ import base64
 import datetime
 import sys
 from enum import Enum
-from typing import Dict, NamedTuple, Optional, Union, Tuple
+from typing import Dict, NamedTuple, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
