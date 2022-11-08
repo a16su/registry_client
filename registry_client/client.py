@@ -12,11 +12,20 @@ from registry_client.repo import RepoClient
 
 
 class RegistryClient:
-    def __init__(self, host="https://registry-1.docker.io", username: str = "", password: str = "", skip_verify=False):
+    def __init__(
+        self,
+        host="https://registry-1.docker.io",
+        username: str = "",
+        password: str = "",
+        skip_verify=False,
+    ):
         self._username = username
         self._password = password
         self.client = AuthClient(
-            base_url=host, auth=(username, password), verify=not skip_verify, follow_redirects=True
+            base_url=host,
+            auth=(username, password),
+            verify=not skip_verify,
+            follow_redirects=True,
         )
         self._registry_client = RepoClient(self.client)
 
@@ -29,7 +38,10 @@ class RegistryClient:
         ref = parse_normalized_named(image_name)
         assert isinstance(ref, NamedReference), Exception("No tag or digest allowed in reference")
         resp = ImageClient(self.client).list_tag(ref, limit, last)
-        if resp.status_code in [401, 404]:  # docker hub status_code is 401, harbor is 404, registry mirror is 200
+        if resp.status_code in [
+            401,
+            404,
+        ]:  # docker hub status_code is 401, harbor is 404, registry mirror is 200
             logger.warning("image may be dont exist, return empty list")
             return []
         resp.raise_for_status()

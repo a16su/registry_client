@@ -90,7 +90,12 @@ class TestBearerToken:
 
     @pytest.mark.parametrize(
         "token, access_token, result",
-        (("foo", "", "foo"), ("foo", "bar", "bar"), ("", "bar", "bar"), ("", "", "exception")),
+        (
+            ("foo", "", "foo"),
+            ("foo", "bar", "bar"),
+            ("", "bar", "bar"),
+            ("", "", "exception"),
+        ),
     )
     def test_token(self, token, access_token, result):
         resp = self.fake_resp(token=token, access_token=access_token)
@@ -170,7 +175,11 @@ class TestBearerAuth:
             },
         )
         auth_request_checker(
-            username=username, password=password, scope=scope, service=service, return_value=return_value
+            username=username,
+            password=password,
+            scope=scope,
+            service=service,
+            return_value=return_value,
         )
         request = flow.send(resp_401)
         assert request.headers.get("Authorization") == f"Bearer {token}"
@@ -304,7 +313,15 @@ class TestAuthClient:
             ("Basic", 1, httpx.BasicAuth),
         ),
     )
-    def test_new_auth(self, auth_client, challenge_scheme, auth_by, want_auth_type, registry_v2, monkeypatch):
+    def test_new_auth(
+        self,
+        auth_client,
+        challenge_scheme,
+        auth_by,
+        want_auth_type,
+        registry_v2,
+        monkeypatch,
+    ):
         registry_v2.respond(headers={"www-authenticate": f"{challenge_scheme} realm='http://example.com'"})
         auther = auth_client.new_auth(auth_by=auth_by)
         assert auth_client.need_auth

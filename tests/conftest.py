@@ -52,7 +52,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         help="ignore registry certificate errors",
     )
     group.addoption(
-        "--registry-proxy", action="store", default="", dest="registry_proxy", help="the proxy used to connect registry"
+        "--registry-proxy",
+        action="store",
+        default="",
+        dest="registry_proxy",
+        help="the proxy used to connect registry",
     )
 
 
@@ -81,13 +85,19 @@ def registry_info(pytestconfig: pytest.Config) -> RegistryInfo:
     if password:
         info_from_env["password"] = password
     return RegistryInfo(
-        host=info_from_env["host"], username=info_from_env["username"], password=info_from_env["password"]
+        host=info_from_env["host"],
+        username=info_from_env["username"],
+        password=info_from_env["password"],
     )
 
 
 @pytest.fixture(scope="session")
 def docker_registry_client(registry_info) -> RegistryClient:
-    return RegistryClient(host=registry_info.host, username=registry_info.username, password=registry_info.password)
+    return RegistryClient(
+        host=registry_info.host,
+        username=registry_info.username,
+        password=registry_info.password,
+    )
 
 
 @pytest.fixture(scope="function")
@@ -176,7 +186,15 @@ def registry_auth_root(registry_auth_mock):
 
 @pytest.fixture(scope="function")
 def auth_request_checker(registry_auth_root):
-    def side_effect_gen(return_value, username="", password="", scope="", service="", no_need_auth=False, check=True):
+    def side_effect_gen(
+        return_value,
+        username="",
+        password="",
+        scope="",
+        service="",
+        no_need_auth=False,
+        check=True,
+    ):
         def side_effect(request_in: httpx.Request) -> httpx.Response:
             if not check:
                 return return_value

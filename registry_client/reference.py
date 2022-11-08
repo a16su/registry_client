@@ -72,7 +72,11 @@ ANCHORED_TAG_REGEXP = re.compile(anchored(tag))
 DIGEST_REGEXP = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][a-fA-F0-9]{32,}")
 ANCHORED_DIGEST_REGEXP = re.compile(anchored(DIGEST_REGEXP.pattern))
 
-name_pat = expression(optional(domain, literal("/")), name_component, optional(repeated(literal("/"), name_component)))
+name_pat = expression(
+    optional(domain, literal("/")),
+    name_component,
+    optional(repeated(literal("/"), name_component)),
+)
 anchored_name = anchored(
     optional(capture(domain), literal("/")),
     capture(name_pat, optional(repeated(literal("/"), name_pat))),
@@ -81,7 +85,9 @@ NAME_REGEXP = re.compile(name_pat)
 ANCHORED_NAME_REGEXP = re.compile(anchored_name)
 
 reference_pat = anchored(
-    capture(name_pat), optional(literal(":"), capture(tag)), optional(literal("@"), capture(DIGEST_REGEXP.pattern))
+    capture(name_pat),
+    optional(literal(":"), capture(tag)),
+    optional(literal("@"), capture(DIGEST_REGEXP.pattern)),
 )
 REFERENCE_REGEXP = re.compile(reference_pat)
 

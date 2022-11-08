@@ -16,7 +16,12 @@ DEFAULT_IMAGE_NAME = "library/hello-world"
 
 class TestImage:
     @staticmethod
-    def _check_pull_image(checker: LocalDockerChecker, image_client: ImageClient, ref, options: ImagePullOptions):
+    def _check_pull_image(
+        checker: LocalDockerChecker,
+        image_client: ImageClient,
+        ref,
+        options: ImagePullOptions,
+    ):
         image_path = image_client.pull(ref=ref, options=options)
         assert image_path.exists() and image_path.is_file()
         save_dir = options.save_dir
@@ -27,26 +32,46 @@ class TestImage:
         "image_name, options",
         (
             (DEFAULT_IMAGE_NAME, {}),
-            (DEFAULT_IMAGE_NAME + ":latest", {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)}),
+            (
+                DEFAULT_IMAGE_NAME + ":latest",
+                {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)},
+            ),
             (f"{DEFAULT_IMAGE_NAME}:linux", {}),
-            (f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4", {}),
+            (
+                f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4",
+                {},
+            ),
         ),
     )
-    def test_pull(self, image_client, image_save_dir, image_name, options: Dict[str, Any], image_checker):
+    def test_pull(
+        self,
+        image_client,
+        image_save_dir,
+        image_name,
+        options: Dict[str, Any],
+        image_checker,
+    ):
         options.update(save_dir=image_save_dir)
         pull_options = ImagePullOptions(**options)
         ref = parse_normalized_named(image_name)
         self._check_pull_image(image_checker, image_client, ref, pull_options)
 
     @pytest.mark.parametrize(
-        "target", [":error-tag", "@sha256:1111111111111111111111111111111111111111111111111111111111111111"]
+        "target",
+        [
+            ":error-tag",
+            "@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        ],
     )
     def test_pull_dont_exists_ref(self, image_client, target):
         ref = parse_normalized_named(f"hello-world{target}")
         with pytest.raises(ImageNotFoundError):
             image_client.pull(ref, ImagePullOptions(pathlib.Path(".")))
 
-    @pytest.mark.parametrize("image_name, result", (("hello-world:error-tag", False), ("hello-world:latest", True)))
+    @pytest.mark.parametrize(
+        "image_name, result",
+        (("hello-world:error-tag", False), ("hello-world:latest", True)),
+    )
     def test_image_right_tag(self, image_client, image_name, result):
         assert image_client.exist(parse_normalized_named(image_name)) == result
 
@@ -73,7 +98,12 @@ class TestImage:
         (
             (DEFAULT_REGISTRY_HOST, "foo", "latest", "foo:latest"),
             (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}/foo", "latest", "foo:latest"),
-            (DEFAULT_REGISTRY_HOST, f"{DEFAULT_REPO}1/foo", "latest", f"{DEFAULT_REPO}1/foo:latest"),
+            (
+                DEFAULT_REGISTRY_HOST,
+                f"{DEFAULT_REPO}1/foo",
+                "latest",
+                f"{DEFAULT_REPO}1/foo:latest",
+            ),
             ("a.com", "foo", "latest", "a.com/foo:latest"),
             ("a.com", "library/foo", "latest", "a.com/library/foo:latest"),
             ("a.com", "a/b/c/d/foo", "latest", "a.com/a/b/c/d/foo:latest"),

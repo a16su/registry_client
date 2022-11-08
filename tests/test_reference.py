@@ -74,7 +74,11 @@ def test_domain_regexp(value: str, match: bool):
         ("simple/name", True, ["simple", "name"]),
         ("library/ubuntu", True, ["library", "ubuntu"]),
         ("docker/stevvooe/app", True, ["docker", "stevvooe/app"]),
-        ("aa/aa/aa/aa/aa/aa/aa/aa/aa/bb/bb/bb/bb/bb/bb", True, ["aa", "aa/aa/aa/aa/aa/aa/aa/aa/bb/bb/bb/bb/bb/bb"]),
+        (
+            "aa/aa/aa/aa/aa/aa/aa/aa/aa/bb/bb/bb/bb/bb/bb",
+            True,
+            ["aa", "aa/aa/aa/aa/aa/aa/aa/aa/bb/bb/bb/bb/bb/bb"],
+        ),
         ("aa/aa/bb/bb/bb", True, ["aa", "aa/bb/bb/bb"]),
         ("a/a/a/a", True, ["a", "a/a/a"]),
         ("a/a/a/a/", False, []),
@@ -118,11 +122,23 @@ def test_domain_regexp(value: str, match: bool):
         ("____/____", False, []),
         ("_docker/_docker", False, []),
         ("docker_/docker_", False, []),
-        ("b.gcr.io/test.example.com/my-app", True, ["b.gcr.io", "test.example.com/my-app"]),
+        (
+            "b.gcr.io/test.example.com/my-app",
+            True,
+            ["b.gcr.io", "test.example.com/my-app"],
+        ),
         ("xn--n3h.com/myimage", True, ["xn--n3h.com", "myimage"]),
         ("xn--7o8h.com/myimage", True, ["xn--7o8h.com", "myimage"]),
-        ("example.com/xn--7o8h.com/myimage", True, ["example.com", "xn--7o8h.com/myimage"]),
-        ("example.com/some_separator__underscore/myimage", True, ["example.com", "some_separator__underscore/myimage"]),
+        (
+            "example.com/xn--7o8h.com/myimage",
+            True,
+            ["example.com", "xn--7o8h.com/myimage"],
+        ),
+        (
+            "example.com/some_separator__underscore/myimage",
+            True,
+            ["example.com", "some_separator__underscore/myimage"],
+        ),
         ("example.com/__underscore/myimage", False, []),
         ("example.com/..dots/myimage", False, []),
         ("example.com/.dots/myimage", False, []),
@@ -135,7 +151,11 @@ def test_domain_regexp(value: str, match: bool):
         ("do..cker/docker", False, []),
         ("do__cker:8080/docker", False, []),
         ("do__cker/docker", True, ["", "do__cker/docker"]),
-        ("b.gcr.io/test.example.com/my-app", True, ["b.gcr.io", "test.example.com/my-app"]),
+        (
+            "b.gcr.io/test.example.com/my-app",
+            True,
+            ["b.gcr.io", "test.example.com/my-app"],
+        ),
         (
             "registry.io/foo/project--id.module--name.ver---sion--name",
             True,
@@ -156,7 +176,11 @@ def test_full_name_regexp(value, match, result):
         (
             "registry.com:8080/myapp@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
             True,
-            ["registry.com:8080/myapp", "", "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912"],
+            [
+                "registry.com:8080/myapp",
+                "",
+                "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
+            ],
         ),
         (
             "registry.com:8080/myapp:tag2@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
@@ -173,18 +197,34 @@ def test_full_name_regexp(value, match, result):
         (
             "localhost:8080@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
             True,
-            ["localhost", "8080", "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912"],
+            [
+                "localhost",
+                "8080",
+                "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
+            ],
         ),
         (
             "localhost:8080/name@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
             True,
-            ["localhost:8080/name", "", "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912"],
+            [
+                "localhost:8080/name",
+                "",
+                "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
+            ],
         ),
-        ("localhost:http/name@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912", False, []),
+        (
+            "localhost:http/name@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
+            False,
+            [],
+        ),
         (
             "localhost@sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
             True,
-            ["localhost", "", "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912"],
+            [
+                "localhost",
+                "",
+                "sha256:be178c0543eb17f5f3043021c9e5fcf30285e557a4fc309cce97ff9ca6182912",
+            ],
         ),
         ("registry.com:8080/myapp@bad", False, []),
         ("registry.com:8080/myapp@2bad", False, []),
@@ -200,8 +240,16 @@ def test_reference_regexp(value, match, result):
         ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821", True, []),
         ("7EC43B381E5AEFE6E04EFB0B3F0693FF2A4A50652D64AEC573905F2DB5889A1C", False, []),
         ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf", False, []),
-        ("sha256:da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821", False, []),
-        ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf98218482", False, []),
+        (
+            "sha256:da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821",
+            False,
+            [],
+        ),
+        (
+            "da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf98218482",
+            False,
+            [],
+        ),
     ),
 )
 def test_identifier_regexp(value, match, result):
@@ -214,8 +262,16 @@ def test_identifier_regexp(value, match, result):
         ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821", True, []),
         ("7EC43B381E5AEFE6E04EFB0B3F0693FF2A4A50652D64AEC573905F2DB5889A1C", False, []),
         ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf", True, []),
-        ("sha256:da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821", False, []),
-        ("da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf98218482", False, []),
+        (
+            "sha256:da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf9821",
+            False,
+            [],
+        ),
+        (
+            "da304e823d8ca2b9d863a3c897baeb852ba21ea9a9f1414736394ae7fcaf98218482",
+            False,
+            [],
+        ),
         ("da304", False, []),
         ("da304e", True, []),
     ),

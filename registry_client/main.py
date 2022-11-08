@@ -58,7 +58,9 @@ def image_name_callback(name: str):
 
 
 image_name_option = Argument(
-    help="image name, like: hello-world:latest|library/hello-world:latest", default=..., callback=image_name_callback
+    help="image name, like: hello-world:latest|library/hello-world:latest",
+    default=...,
+    callback=image_name_callback,
 )
 
 
@@ -94,7 +96,12 @@ def list_tags(
 def pull_image(
     name: str = image_name_option,
     platform: str = Option(
-        None, "--platform", "-p", help="", callback=platform_callback, autocompletion=platform_complete
+        None,
+        "--platform",
+        "-p",
+        help="",
+        callback=platform_callback,
+        autocompletion=platform_complete,
     ),
     image_format: ImageFormat = Option(ImageFormat.V2.value, "--format", "-f"),
     save_to: pathlib.Path = Option(..., help="save image to which dir"),
@@ -142,5 +149,8 @@ def main(
     password: str = Option("", help="registry password", hide_input=True),
 ):
     Context.global_options = GlobalOptions(
-        ignore_cert_error=ignore_cert_error, plain_http=plain_http, username=username, password=password
+        ignore_cert_error=ignore_cert_error,
+        plain_http=plain_http,
+        username=username,
+        password=password,
     )

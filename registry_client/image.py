@@ -15,13 +15,11 @@ else:
     from typing_extensions import Literal
 
 import httpx
-import requests
-from loguru import logger
 
 from registry_client.auth import AuthClient
 from registry_client.digest import Digest
 from registry_client.errors import ImageNotFoundError
-from registry_client.export import ImageV2Tar, TarImageDir
+from registry_client.export import ImageV2Tar
 from registry_client.manifest import ManifestClient, ManifestIndex, ManifestList
 from registry_client.media_types import ImageMediaType
 from registry_client.platforms import Platform
@@ -71,7 +69,13 @@ class BlobClient:
         url = f"/v2/{ref.path}/blobs/{ref.digest}"
         if method == "STREAM":
             return self.client.stream("GET", url=url, auth=self.client.new_auth(auth_by=scope), params=params)
-        return self.client.request(method, url=url, auth=self.client.new_auth(auth_by=scope), params=params, json=body)
+        return self.client.request(
+            method,
+            url=url,
+            auth=self.client.new_auth(auth_by=scope),
+            params=params,
+            json=body,
+        )
 
     def get(self, ref: CanonicalReference, stream=False) -> Union[Iterable[httpx.Response], httpx.Response]:
         method = "STREAM" if stream else "GET"
@@ -104,7 +108,12 @@ class ImageClient:
             return f"{reference.path}:{target}"
         return str(reference)
 
-    def list_tag(self, ref: NamedReference, limit: Optional[int] = None, last: Optional[str] = None) -> httpx.Response:
+    def list_tag(
+        self,
+        ref: NamedReference,
+        limit: Optional[int] = None,
+        last: Optional[str] = None,
+    ) -> httpx.Response:
         name = ref.path
         scope = RepositoryScope(repo_name=name, actions=["pull"])
         params = {}
@@ -112,12 +121,16 @@ class ImageClient:
             params["n"] = limit
         if last:
             params["last"] = last
-        return self.client.get(f"/v2/{name}/tags/list", auth=self.client.new_auth(auth_by=scope), params=params)
+        return self.client.get(
+            f"/v2/{name}/tags/list",
+            auth=self.client.new_auth(auth_by=scope),
+            params=params,
+        )
 
     def _tar_layers(
         self,
         reference: Union[TaggedReference, CanonicalReference, DigestReference],
-        image_config: requests.Response,
+        image_config: httpx.Response,
         layers_file_list: List[pathlib.Path],
         layers_dir: pathlib.Path,
         options: ImagePullOptions,
@@ -140,10 +153,28 @@ class ImageClient:
                 }
                 json.dump([data], f)
 
-            final_path = ImageV2Tar(src_dir=layers_dir, target_path=image_save_path, compress=options.compression).do()
+            final_path = ImageV2Tar(
+                src_dir=layers_dir,
+                target_path=image_save_path,
+                compress=options.compression,
+            ).do()
             return final_path
         elif options.image_format == ImageFormat.OCI:
-            return image_save_path
+            pass
+            # with layers_dir.joinpath("oci-layout").open("w", encoding="utf-8") as f:
+            #     json.dump({"imageLayoutVersion": "1.0.0"}, f)
+            #
+            # index_content = {
+            #     "schemaVersion": 2,
+            #     "manifests": [
+            #         {
+            #             "mediaType": OCIImageMediaType.MediaTypeImageIndex,
+            #             "digest": 1
+            #         }
+            #     ]
+            # }
+            #
+            # return image_save_path
         else:
             raise Exception("invalid image format")
 
@@ -183,8 +214,6 @@ class ImageClient:
         manifest = self._get_manifest(manifest_content_resp, r, options.platform)
         image_digest = CanonicalReference(ref.domain, ref.path, digest=manifest.config.digest)
         image_config = self.get_image_config(image_digest)
-        logger.info(image_config.text)
-        logger.info(manifest)
         layers_file_list = []
         for one_layer in manifest.layers:
             layer_path = temp_dir_path.joinpath(f"{one_layer.digest.hex}/layer.tar")
@@ -192,7 +221,8 @@ class ImageClient:
             is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
             with open(layer_path, "wb") as f:
                 with self._blob_client.get(
-                    CanonicalReference(image_digest.domain, image_digest.path, digest=one_layer.digest), stream=True
+                    CanonicalReference(image_digest.domain, image_digest.path, digest=one_layer.digest),
+                    stream=True,
                 ) as resp:
                     if is_gzip:
                         if resp.headers.get("Content-Encoding") is None:

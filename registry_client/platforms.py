@@ -1,6 +1,7 @@
+import json
 import platform
 from enum import Enum
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -57,15 +58,32 @@ class Variant(Enum):
         else:
             self._value_ = value.lower()
 
+    def __str__(self):
+        return self.value
+
 
 # vendor/github.com/containerd/containerd/platforms/database.go:83
 class Platform(BaseModel):
     os: OS = OS(DEFAULT_SYSTEM)
     architecture: Arch = Arch(DEFAULT_MACHINE)
-    variant: Optional[Variant] = Variant.Unknown
+    variant: Optional[Variant] = None
+    os_features: Optional[List[str]]
 
     def __eq__(self, other: "Platform"):
         return self.os == other.os and self.architecture == other.architecture
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def dict(self, *args, **kwargs):
+
+        data = super(Platform, self).dict(*args, **kwargs)
+        if data["variant"] is None:
+            del data["variant"]
+        return data
+
+    def json(self, *args, **kwargs) -> str:
+        data = {"os": self.os.value, "architecture": self.architecture.value}
+        if self.variant is not None:
+            data["variant"] = self.variant.value
+        return json.dumps(data)

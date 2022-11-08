@@ -4,13 +4,15 @@
 import sys
 from typing import List, Optional, Union
 
+from registry_client.utlis import CustomModel
+
 if sys.version_info >= (3, 8):
     from typing import Literal
 else:
     from typing_extensions import Literal
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from registry_client.auth import AuthClient
 from registry_client.digest import Digest
@@ -20,21 +22,21 @@ from registry_client.reference import Reference
 from registry_client.scope import RepositoryScope
 
 
-class LayerInfo(BaseModel):
+class LayerInfo(CustomModel):
     media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
     size: int
     digest: Digest
     platform: Optional[Platform] = Field(default_factory=Platform)
 
 
-class ManifestIndex(BaseModel):
+class ManifestIndex(CustomModel):
     schema_version: str = Field(alias="schemaVersion")
     media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
     config: LayerInfo
     layers: List[LayerInfo]
 
 
-class ManifestList(BaseModel):
+class ManifestList(CustomModel):
     manifests: List[LayerInfo]
     schema_version: str = Field(alias="schemaVersion")
     media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
