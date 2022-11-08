@@ -1,6 +1,8 @@
 import hashlib
 from typing import List
 
+from pydantic import BaseModel
+
 IMAGE_DEFAULT_TAG: str = "latest"
 DEFAULT_REPO: str = "library"
 DEFAULT_REGISTRY_HOST: str = "registry-1.docker.io"
@@ -25,6 +27,18 @@ def diff_ids_to_chain_ids(diff_ids: List[str]) -> List[str]:
     for diff_id in diff_ids[1:]:
         result.append(get_chain_id(result[-1], [diff_id]))
     return result
+
+
+class CustomModel(BaseModel):
+    class Config:
+        from registry_client.digest import Digest
+
+        json_encoders = {Digest: str}
+
+    def json(self, *args, **kwargs):
+        if kwargs.get("by_alias") is None:
+            kwargs["by_alias"] = True
+        return super(CustomModel, self).json(*args, **kwargs)
 
 
 # def v1_image_id(layer_id: str, parent: str, v1image: "V1Image" = None) -> str:
