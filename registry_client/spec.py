@@ -60,7 +60,7 @@ class Artifact(CustomModel):
 
 
 class Manifest(CustomModel):
-    schema_version: int = Field(alias="schemaVersion")
+    schema_version: int = Field(alias="schemaVersion", default=2)
     media_type: typing.Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
     config: Descriptor
     layers: typing.List[Descriptor]
@@ -69,7 +69,7 @@ class Manifest(CustomModel):
 
 
 class Index(CustomModel):
-    schema_version: int = Field(alias="schemaVersion")
+    schema_version: int = Field(alias="schemaVersion", default=2)
     media_type: typing.Optional[typing.Union[ImageMediaType, OCIImageMediaType]] = Field(alias="mediaType")
     manifests: typing.List[Descriptor]
 

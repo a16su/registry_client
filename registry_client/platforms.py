@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from registry_client.digest import Digest
+
 DEFAULT_SYSTEM = platform.system().lower()
 if DEFAULT_SYSTEM == "windows":
     DEFAULT_SYSTEM = "linux"
@@ -87,3 +89,13 @@ class Platform(BaseModel):
         if self.variant is not None:
             data["variant"] = self.variant.value
         return json.dumps(data)
+
+
+def filter_by_platform(manifests: List["Descriptor"], target_platform: Platform) -> Digest:
+    if target_platform is None:
+        return manifests[0].digest
+    for manifest in manifests:
+        if manifest.platform == target_platform:
+            return manifest.digest
+    else:
+        raise Exception("Not Found Matching image")

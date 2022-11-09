@@ -12,43 +12,11 @@ else:
     from typing_extensions import Literal
 
 import httpx
-from pydantic import Field
 
 from registry_client.auth import AuthClient
-from registry_client.digest import Digest
 from registry_client.media_types import ImageMediaType, OCIImageMediaType
-from registry_client.platforms import Platform
 from registry_client.reference import Reference
 from registry_client.scope import RepositoryScope
-
-
-class LayerInfo(CustomModel):
-    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
-    size: int
-    digest: Digest
-    platform: Optional[Platform] = Field(default_factory=Platform)
-
-
-class ManifestIndex(CustomModel):
-    schema_version: str = Field(alias="schemaVersion")
-    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
-    config: LayerInfo
-    layers: List[LayerInfo]
-
-
-class ManifestList(CustomModel):
-    manifests: List[LayerInfo]
-    schema_version: str = Field(alias="schemaVersion")
-    media_type: Union[ImageMediaType, OCIImageMediaType] = Field(alias="mediaType")
-
-    def filter_by_platform(self, platform: Platform) -> Digest:
-        if platform is None:
-            return self.manifests[0].digest
-        for manifest in self.manifests:
-            if manifest.platform == platform:
-                return manifest.digest
-        else:
-            raise Exception("Not Found Matching image")
 
 
 class ManifestClient:
