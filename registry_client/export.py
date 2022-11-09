@@ -1,3 +1,4 @@
+import dataclasses
 import gzip
 import json
 import os
@@ -8,13 +9,92 @@ from typing import List
 
 from loguru import logger
 
+from registry_client import spec
 from registry_client.digest import Digest
-from registry_client.spec import Index
+from registry_client.media_types import OCIImageMediaType
 
 BZIP_MAGIC = b"\x42\x5A\x68"
 GZIP_MAGIC = b"\x1F\x8B\x8B"
 XZ_MAGIC = b"\xFD\x37\x7A\x58\x5A\x00"
 ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+
+
+@dataclasses.dataclass
+class ImageFileSort:
+    image_name: str
+    target_dir: pathlib.Path
+    layers_by_sort: List[pathlib.Path]
+    image_config: bytes
+
+    def to_docker_v2(self):
+        image_config_digest = Digest.from_bytes(self.image_config)
+        with self.target_dir.joinpath(f"{image_config_digest.hex}.json").open("wb") as f:
+            f.write(self.image_config)
+
+        for index, layer_path in enumerate(self.layers_by_sort):
+            layer_digest = layer_path.stem
+            layer_dir = self.target_dir.joinpath(layer_digest)
+            layer_dir.mkdir()
+            target_path = layer_dir.joinpath("layer.tar")
+            shutil.move(layer_path, target_path)
+            self.layers_by_sort[index] = target_path
+
+        with open(self.target_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
+            repo_tags = [self.image_name] if self.image_name else []
+            data = {
+                "Config": f"{image_config_digest.hex}.json",
+                "RepoTags": repo_tags,
+                "Layers": [str(path) for path in self.layers_by_sort],
+            }
+            json.dump([data], f)
+
+    def to_oci(self, image_config_digest: Digest):
+        with self.target_dir.joinpath(spec.ImageLayoutFile).open("w", encoding="utf-8") as f:
+            json.dump(spec.ImageLayout().dict(by_alias=True), f)
+
+        blobs_dir = self.target_dir.joinpath("blobs")
+        blobs_dir.mkdir()
+        sub_dir: pathlib.Path = blobs_dir.joinpath(image_config_digest.algom.value)
+        sub_dir.mkdir()
+        layers: List[spec.Descriptor] = []
+        for layer_file in self.layers_by_sort:
+            target = sub_dir.joinpath(layer_file.stem)
+            shutil.move(layer_file, sub_dir.joinpath(layer_file.stem))
+
+            digest = Digest(f"{target.parent.name}:{target.stem}")
+            size = target.stat().st_size
+            layers.append(spec.Descriptor(mediaType=OCIImageMediaType.MediaTypeImageLayer, digest=digest, size=size))
+
+        image_config_path = sub_dir.joinpath(image_config_digest.hex)
+        with image_config_path.open("wb") as f:
+            f.write(self.image_config)
+
+        manifest = spec.Manifest(
+            mediaType=OCIImageMediaType.MediaTypeImageManifest,
+            config=spec.Descriptor(
+                mediaType=OCIImageMediaType.MediaTypeImageConfig,
+                digest=image_config_digest,
+                size=image_config_path.stat().st_size,
+            ),
+            layers=layers,
+        ).json(exclude_none=True, by_alias=True)
+        manifest_digest = Digest.from_bytes(manifest.encode())
+        manifest_path = sub_dir.joinpath(manifest_digest.hex)
+        with open(manifest_path, "w") as f:
+            f.write(manifest)
+
+        index = spec.Index(
+            mediaType=OCIImageMediaType.MediaTypeImageIndex,
+            manifests=[
+                spec.Descriptor(
+                    mediaType=OCIImageMediaType.MediaTypeImageManifest,
+                    digest=manifest_digest,
+                    size=manifest_path.stat().st_size,
+                )
+            ],
+        ).json(exclude_none=True, by_alias=True)
+        with open(self.target_dir.joinpath("index.json"), "w") as f:
+            f.write(index)
 
 
 class TarImageDir:
@@ -115,7 +195,7 @@ class ImageV2Tar(TarImageDir):
 
         image_config_path = self.src_dir.joinpath(image_manifest["Config"])
         self._check_image_config(image_config_path)
-        with image_config_path.open("r", encoding="utf-8") as f:
+        with image_config_path.open("rb") as f:
             image_config = json.load(f)
 
         layer_paths = image_manifest["Layers"]
@@ -149,7 +229,7 @@ class OCIImageTar(TarImageDir):
         with layout_file.open("r", encoding="utf-8") as f:
             oci_layout = json.load(f)
             image_layout_version = oci_layout.get("imageLayoutVersion")
-            assert image_layout_version and image_layout_version == "1.0.0"
+            assert image_layout_version and image_layout_version == "1.0.0", image_layout_version
 
     @classmethod
     def _check_index(cls, index_path: pathlib.Path):
@@ -177,7 +257,7 @@ class OCIImageTar(TarImageDir):
         index_file = self.src_dir.joinpath("index.json")
         self._check_index(index_path=index_file)
         with index_file.open("r", encoding="utf-8") as f:
-            index = Index(**json.load(f))
+            index = spec.Index(**json.load(f))
         manifest = index.manifests[0]
         digest: Digest = manifest.digest
         blob_dir = self.src_dir.joinpath("blobs")
