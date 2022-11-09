@@ -44,7 +44,7 @@ class ImageFileSort:
             data = {
                 "Config": f"{image_config_digest.hex}.json",
                 "RepoTags": repo_tags,
-                "Layers": [str(path) for path in self.layers_by_sort],
+                "Layers": [str(path.relative_to(self.target_dir)) for path in self.layers_by_sort],
             }
             json.dump([data], f)
 
