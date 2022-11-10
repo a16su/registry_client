@@ -226,6 +226,13 @@ class ImageClient:
     def push(cls, image_path: pathlib.Path, force=False):
         assert image_path.exists() and image_path.is_file()
 
+    def delete(self, ref: CanonicalReference) -> httpx.Response:
+        name = ref.path
+        target = ref.target
+        scope = RepositoryScope(repo_name=name, actions=["delete"])
+        resp = self.client.delete(f"/v2/{name}/manifests/{target}", auth=self.client.new_auth(scope))
+        return resp
+
     def exist(self, ref: Reference) -> bool:
         resp = self._manifest_client.head(ref)
         return resp.status_code == 200

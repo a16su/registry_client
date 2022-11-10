@@ -32,3 +32,16 @@ client = RegistryClient(host="https://registry-1.docker.io",
 repos = client.catalog()
 print(repos)  # ['library/hello-world']
 ```
+
+#### 3. delete a image
+```python
+from registry_client.client import RegistryClient
+
+client = RegistryClient(host="https://registry-1.docker.io",
+                        username="your_username",
+                        password="your_password")
+repos = client.delete_image(
+    image_name="repo/hello-world@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4"
+)
+
+```
