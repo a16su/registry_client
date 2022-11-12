@@ -5,7 +5,7 @@
 import re
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from registry_client import errors
 from registry_client.digest import Digest
@@ -50,47 +50,47 @@ def literal(v: str):
     return "".join(v)
 
 
-alpha_numeric = r"[a-z0-9]+"
-separator = r"(?:[._]|__|[-]*)"
-name_component = expression(alpha_numeric, optional(repeated(separator, alpha_numeric)))
+__alpha_numeric = r"[a-z0-9]+"
+__separator = r"(?:[._]|__|[-]*)"
+__name_component = expression(__alpha_numeric, optional(repeated(__separator, __alpha_numeric)))
 
-domain_name_component = r"(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])"
-ipv6_address = r"\[(?:[a-fA-F0-9:]+)\]"
-domain_name = expression(domain_name_component, optional(repeated(literal("."), domain_name_component)))
-host = f"(?:{domain_name}|{ipv6_address})"
-domain = expression(
-    host,
+__domain_name_component = r"(?:[a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9])"
+__ipv6_address = r"\[(?:[a-fA-F0-9:]+)\]"
+__domain_name = expression(__domain_name_component, optional(repeated(literal("."), __domain_name_component)))
+__host = f"(?:{__domain_name}|{__ipv6_address})"
+__domain = expression(
+    __host,
     optional(literal(":"), r"[0-9]+"),
 )
-DOMAIN_REGEXP = re.compile(domain)
 
-tag = r"[\w][\w.-]{0,127}"
-TAG_REGEXP = re.compile(tag)
+__tag = r"[\w][\w.-]{0,127}"
 
-ANCHORED_TAG_REGEXP = re.compile(anchored(tag))
+__name_pat = expression(
+    optional(__domain, literal("/")),
+    __name_component,
+    optional(repeated(literal("/"), __name_component)),
+)
+__anchored_name = anchored(
+    optional(capture(__domain), literal("/")),
+    capture(__name_pat, optional(repeated(literal("/"), __name_pat))),
+)
+
+DOMAIN_REGEXP = re.compile(__domain)
+TAG_REGEXP = re.compile(__tag)
+
+ANCHORED_TAG_REGEXP = re.compile(anchored(__tag))
 
 DIGEST_REGEXP = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_+.][A-Za-z][A-Za-z0-9]*)*[:][a-fA-F0-9]{32,}")
-ANCHORED_DIGEST_REGEXP = re.compile(anchored(DIGEST_REGEXP.pattern))
-
-name_pat = expression(
-    optional(domain, literal("/")),
-    name_component,
-    optional(repeated(literal("/"), name_component)),
-)
-anchored_name = anchored(
-    optional(capture(domain), literal("/")),
-    capture(name_pat, optional(repeated(literal("/"), name_pat))),
-)
-NAME_REGEXP = re.compile(name_pat)
-ANCHORED_NAME_REGEXP = re.compile(anchored_name)
-
-reference_pat = anchored(
-    capture(name_pat),
-    optional(literal(":"), capture(tag)),
+__reference_pat = anchored(
+    capture(__name_pat),
+    optional(literal(":"), capture(__tag)),
     optional(literal("@"), capture(DIGEST_REGEXP.pattern)),
 )
-REFERENCE_REGEXP = re.compile(reference_pat)
+ANCHORED_DIGEST_REGEXP = re.compile(anchored(DIGEST_REGEXP.pattern))
 
+NAME_REGEXP = re.compile(__name_pat)
+ANCHORED_NAME_REGEXP = re.compile(__anchored_name)
+REFERENCE_REGEXP = re.compile(__reference_pat)
 IDENTIFIER_REGEXP = re.compile(r"([a-f0-9]{64})")
 SHORT_IDENTIFIER_REGEXP = re.compile(r"([a-f0-9]{6,64})")
 ANCHORED_IDENTIFIER_REGEXP = re.compile(anchored(IDENTIFIER_REGEXP.pattern))
@@ -149,7 +149,11 @@ class DigestReference(Reference):
 
 @dataclass
 class CanonicalReference(Reference):
-    digest: Optional[Digest] = None
+    digest: Optional[Union[Digest, str]] = None
+
+    def __post_init__(self):
+        if isinstance(self.digest, str):
+            self.digest = Digest(self.digest)
 
     @property
     def target(self):
