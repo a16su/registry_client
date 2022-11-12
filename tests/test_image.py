@@ -4,10 +4,11 @@ from typing import Any, Dict
 import httpx
 import pytest
 
+from registry_client.digest import Digest
 from registry_client.errors import ImageNotFoundError
 from registry_client.image import ImageClient, ImagePullOptions
 from registry_client.platforms import OS, Arch, Platform
-from registry_client.reference import parse_normalized_named
+from registry_client.reference import CanonicalReference, parse_normalized_named
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 from tests.local_docker import LocalDockerChecker
 
@@ -43,14 +44,7 @@ class TestImage:
             ),
         ),
     )
-    def test_pull(
-        self,
-        image_client,
-        image_save_dir,
-        image_name,
-        options: Dict[str, Any],
-        image_checker,
-    ):
+    def test_pull(self, image_client, image_save_dir, image_name, options: Dict[str, Any], image_checker):
         options.update(save_dir=image_save_dir)
         pull_options = ImagePullOptions(**options)
         ref = parse_normalized_named(image_name)
@@ -63,7 +57,8 @@ class TestImage:
             "@sha256:1111111111111111111111111111111111111111111111111111111111111111",
         ],
     )
-    def test_pull_dont_exists_ref(self, image_client, target):
+    def test_pull_dont_exists_ref(self, image_client, target, registry_manifest):
+        registry_manifest.respond(status_code=404)
         ref = parse_normalized_named(f"hello-world{target}")
         with pytest.raises(ImageNotFoundError):
             image_client.pull(ref, ImagePullOptions(pathlib.Path(".")))
@@ -72,26 +67,32 @@ class TestImage:
         "image_name, result",
         (("hello-world:error-tag", False), ("hello-world:latest", True)),
     )
-    def test_image_right_tag(self, image_client, image_name, result):
+    def test_image_right_tag(self, image_client, image_name, result, registry_manifest):
+        registry_manifest.respond(200 if result else 404)
         assert image_client.exist(parse_normalized_named(image_name)) == result
 
-    def test_get_tags(self, image_client, docker_hub_client):
+    def test_get_tags(self, image_client, registry_tags):
         image_name = "library/hello-world"
         ref = parse_normalized_named(image_name)
-        tags_by_api = image_client.list_tag(ref).json().get("tags", [])
-        tags_by_http = docker_hub_client.list_tags(image_name)
-        assert not set(tags_by_api) - set(tags_by_http)
+        tags = ["latest", "linux", "windows"]
+        registry_tags.respond(json={"tags": tags[1]})
+        tags_get = image_client.list_tag(ref).json().get("tags", [])
+        assert not tags_get == [tags[1]]
 
-    def test_tags_paginated_last(self, image_client):
+    def test_tags_paginated_last(self, image_client, registry_tags):
+        tags_server = ["latest", "linux"]
+        registry_tags.respond(json={"tags": [tags_server[0]]})
         ref = parse_normalized_named("library/hello-world")
         tags = image_client.list_tag(ref, limit=1).json().get("tags", None)
-        assert len(tags) == 1
+        assert tags == [tags_server[0]]
+        registry_tags.respond(json={"tags": [tags_server[1]]})
         next_tags = image_client.list_tag(ref, limit=1, last=tags[-1]).json().get("tags", None)
-        assert next_tags and next_tags != tags
+        assert next_tags and next_tags != tags and next_tags == [tags_server[1]]
 
-    def test_get_dont_exists_image_tags(self, image_client):
+    def test_get_dont_exists_image_tags(self, image_client, registry_tags):
+        registry_tags.respond(404)
         resp = image_client.list_tag(parse_normalized_named("library/hello-world1"))
-        assert resp.status_code in (400, 401)
+        assert 400 <= resp.status_code < 500
 
     @pytest.mark.parametrize(
         "host, image_name, target, want",
@@ -122,3 +123,15 @@ class TestImage:
         ref_str = f"{host}/{image_name}{target}"
         ref = parse_normalized_named(ref_str)
         assert image_client.repo_tag(ref) == want
+
+    def test_delete_image(self, image_client, registry_manifest):
+        def delete_image_side_effect(request: httpx.Request, repo, name, target: str):
+            if request.method == "DELETE":
+                return httpx.Response(200, json={"target": target})
+            return httpx.Response(200)
+
+        registry_manifest.side_effect = delete_image_side_effect
+        target_digest = Digest.from_bytes(b"123")
+        ref = CanonicalReference(path="library/repo", digest=target_digest)
+        resp = image_client.delete(ref)
+        assert resp.json()["target"] == target_digest.value

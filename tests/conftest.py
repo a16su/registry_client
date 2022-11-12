@@ -13,7 +13,6 @@ from registry_client.digest import Digest
 from registry_client.image import BlobClient, ImageClient
 from registry_client.manifest import ManifestClient
 from registry_client.repo import RepoClient
-from tests.docker_hub_client import DockerHubClient
 from tests.local_docker import LocalDockerChecker
 
 FAKE_REGISTRY_AUTH_HOST = "https://auth-test.registrt-fake.yy"
@@ -129,11 +128,6 @@ def blob_client(docker_registry_client):
     return BlobClient(docker_registry_client.client)
 
 
-@pytest.fixture(scope="session")
-def docker_hub_client() -> DockerHubClient:
-    return DockerHubClient()
-
-
 @pytest.fixture(scope="function")
 def docker_image(docker_registry):
     return docker_registry.image
@@ -169,7 +163,7 @@ def registry_mock(registry_info):
     global FAKE_REGISTRY_PASSWORD
     FAKE_REGISTRY_USERNAME = registry_info.username
     FAKE_REGISTRY_PASSWORD = registry_info.password
-    with respx.mock(base_url=registry_info.host, assert_all_mocked=False, assert_all_called=False) as registry_mock:
+    with respx.mock(base_url=registry_info.host) as registry_mock:
         yield registry_mock
 
 
@@ -179,13 +173,13 @@ def registry_auth_mock(registry_info):
         yield registry_auth_mock
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def registry_auth_root(registry_auth_mock):
-    return registry_auth_mock.route(method="GET", path="/", name="root")
+    yield registry_auth_mock.route(method="GET", path="/", name="root")
 
 
 @pytest.fixture(scope="function")
-def auth_request_checker(registry_auth_root):
+def auth_request_checker(registry_auth_root, monkeypatch):
     def side_effect_gen(
         return_value,
         username="",
@@ -212,7 +206,8 @@ def auth_request_checker(registry_auth_root):
                 assert params.get("service") == service
             return return_value
 
-        registry_auth_root.side_effect = side_effect
+        monkeypatch.setattr(registry_auth_root, "side_effect", side_effect)
+        # registry_auth_root.side_effect = side_effect
 
     return side_effect_gen
 
@@ -220,3 +215,18 @@ def auth_request_checker(registry_auth_root):
 @pytest.fixture(scope="function")
 def registry_v2(registry_mock):
     yield registry_mock.route(path="/v2/", method="GET", name="v2")
+
+
+@pytest.fixture(scope="function")
+def registry_catalog(registry_mock):
+    yield registry_mock.route(path="/v2/_catalog", method="GET", name="catalog")
+
+
+@pytest.fixture(scope="function")
+def registry_tags(registry_mock):
+    yield registry_mock.route(path__regex="/v2/(?P<repo>.*?)/(?P<name>.*?)/tags/(?P<action>.*)", name="tags")
+
+
+@pytest.fixture(scope="function")
+def registry_manifest(registry_mock):
+    yield registry_mock.route(path__regex="/v2/(?P<repo>.*?)/(?P<name>.*?)/manifests/(?P<target>.*)", name="manifest")
