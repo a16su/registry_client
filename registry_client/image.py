@@ -32,7 +32,11 @@ from registry_client.reference import (
     TaggedReference,
 )
 from registry_client.scope import RepositoryScope
-from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
+from registry_client.utlis import (
+    DEFAULT_REGISTRY_HOST,
+    DEFAULT_REPO,
+    diff_ids_to_chain_ids,
+)
 
 MAX_MANIFEST_SIZE = 4 * 1048 * 1048
 
@@ -131,12 +135,21 @@ class ImageClient:
     def _tar_layers(
         self,
         reference: Union[TaggedReference, CanonicalReference, DigestReference],
-        image_config: httpx.Response,
-        image_config_digest: Digest,
-        layers_file_list: List[pathlib.Path],
         layers_dir: pathlib.Path,
         options: ImagePullOptions,
     ) -> pathlib.Path:
+        """
+        |- layer_id1/layer.tar
+        |- layer_id2/layer.tar
+        |- image_config.json
+        Args:
+            reference:
+            layers_dir:
+            options:
+
+        Returns:
+
+        """
         target = reference.target
         image_save_path = options.save_dir.joinpath(f"{re.sub(r'[.:/]', '_', reference.name)}_{target}.tar")
         assert layers_dir.exists() and layers_dir.is_dir()
@@ -144,8 +157,6 @@ class ImageClient:
         sort_tool = ImageFileSort(
             image_name=image_name,
             target_dir=layers_dir,
-            layers_by_sort=layers_file_list,
-            image_config=image_config.content,
         )
         if options.image_format == ImageFormat.V2:
             sort_tool.to_docker_v2()
@@ -156,8 +167,12 @@ class ImageClient:
             ).do()
             return final_path
         elif options.image_format == ImageFormat.OCI:
-            sort_tool.to_oci(image_config_digest)
-            return OCIImageTar(src_dir=layers_dir, target_path=image_save_path, compress=options.compression).do()
+            sort_tool.to_oci()
+            return OCIImageTar(
+                src_dir=layers_dir,
+                target_path=image_save_path,
+                compress=options.compression,
+            ).do()
         else:
             raise Exception("invalid image format")
 
@@ -196,14 +211,28 @@ class ImageClient:
         manifest_content_resp = self._manifest_client.get(r)
         manifest = self._get_manifest(manifest_content_resp, r, options.platform)
         image_digest_ref = CanonicalReference(ref.domain, ref.path, digest=manifest.config.digest)
-        image_config = self.get_image_config(image_digest_ref)
-        layers_file_list = []
-        for one_layer in manifest.layers:
-            layer_path = temp_dir_path.joinpath(f"{one_layer.digest.hex}.tar")
-            is_gzip = one_layer.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
-            with open(layer_path, "wb") as f:
+        image_config_resp = self.get_image_config(image_digest_ref)
+        image_config = spec.Image(**image_config_resp.json())
+        assert len(image_config.rootfs.diff_ids) == len(manifest.layers), Exception("Invalid Manifest And ImageConfig")
+
+        with open(temp_dir_path.joinpath("image_config.json"), "wb") as f:
+            f.write(image_config_resp.content)
+
+        layer_id_generator = diff_ids_to_chain_ids(image_config.rootfs.diff_ids)
+
+        index = 0
+        for layer_id in layer_id_generator:
+            layer_path = temp_dir_path.joinpath(Digest(layer_id).hex)
+            layer_path.mkdir()
+            layer_desc = manifest.layers[index]
+            is_gzip = layer_desc.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
+            with open(layer_path.joinpath("layer.tar"), "wb") as f:
                 with self._blob_client.get(
-                    CanonicalReference(image_digest_ref.domain, image_digest_ref.path, digest=one_layer.digest),
+                    CanonicalReference(
+                        image_digest_ref.domain,
+                        image_digest_ref.path,
+                        digest=layer_desc.digest,
+                    ),
                     stream=True,
                 ) as resp:
                     if is_gzip and options.image_format != ImageFormat.OCI:  # oci image use gzip layer
@@ -211,12 +240,9 @@ class ImageClient:
                             resp.headers["content-encoding"] = "gzip"  # let httpx decode gzip
                     for content in resp.iter_bytes():
                         f.write(content)
-            layers_file_list.append(layer_path)
+            index += 1
         image_path = self._tar_layers(
             ref,
-            image_config=image_config,
-            image_config_digest=image_digest_ref.digest,
-            layers_file_list=layers_file_list,
             layers_dir=temp_dir_path,
             options=options,
         )

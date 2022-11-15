@@ -5,13 +5,14 @@ import os
 import pathlib
 import shutil
 import tarfile
-from typing import List
+from typing import List, Tuple
 
 from loguru import logger
 
 from registry_client import spec
 from registry_client.digest import Digest
 from registry_client.media_types import OCIImageMediaType
+from registry_client.utlis import diff_ids_to_chain_ids
 
 BZIP_MAGIC = b"\x42\x5A\x68"
 GZIP_MAGIC = b"\x1F\x8B\x8B"
@@ -23,58 +24,60 @@ ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
 class ImageFileSort:
     image_name: str
     target_dir: pathlib.Path
-    layers_by_sort: List[pathlib.Path]
-    image_config: bytes
+
+    def _load_image_config(self, name: str = "image_config.json") -> Tuple[spec.Image, Digest]:
+        image_config_path = self.target_dir.joinpath(name)
+        assert image_config_path.exists() and image_config_path.is_file()
+        with open(image_config_path, "rb") as f:
+            image_config = spec.Image(**json.load(f))
+        image_config_digest = Digest.from_file(image_config_path)
+        image_config_path.rename(self.target_dir.joinpath(f"{image_config_digest.hex}.json"))
+        return image_config, image_config_digest
 
     def to_docker_v2(self):
-        image_config_digest = Digest.from_bytes(self.image_config)
-        with self.target_dir.joinpath(f"{image_config_digest.hex}.json").open("wb") as f:
-            f.write(self.image_config)
 
-        for index, layer_path in enumerate(self.layers_by_sort):
-            layer_digest = layer_path.stem
-            layer_dir = self.target_dir.joinpath(layer_digest)
-            layer_dir.mkdir()
-            target_path = layer_dir.joinpath("layer.tar")
-            shutil.move(layer_path, target_path)
-            self.layers_by_sort[index] = target_path
-
+        image_config, image_config_digest = self._load_image_config()
         with open(self.target_dir.joinpath("manifest.json"), "w", encoding="utf-8") as f:
             repo_tags = [self.image_name] if self.image_name else []
             data = {
                 "Config": f"{image_config_digest.hex}.json",
                 "RepoTags": repo_tags,
-                "Layers": [str(path.relative_to(self.target_dir)) for path in self.layers_by_sort],
+                "Layers": [
+                    f"{Digest(layer_id).hex}/layer.tar"
+                    for layer_id in diff_ids_to_chain_ids(image_config.rootfs.diff_ids)
+                ],
             }
             json.dump([data], f)
 
-    def to_oci(self, image_config_digest: Digest):
+    def to_oci(self):
         with self.target_dir.joinpath(spec.ImageLayoutFile).open("w", encoding="utf-8") as f:
             json.dump(spec.ImageLayout().dict(by_alias=True), f)
 
+        image_config, image_config_digest = self._load_image_config()
+
         blobs_dir = self.target_dir.joinpath("blobs")
         blobs_dir.mkdir()
-        sub_dir: pathlib.Path = blobs_dir.joinpath(image_config_digest.algom.value)
+        sub_dir: pathlib.Path = blobs_dir.joinpath("sha256")
         sub_dir.mkdir()
         layers: List[spec.Descriptor] = []
-        for layer_file in self.layers_by_sort:
-            target = sub_dir.joinpath(layer_file.stem)
-            shutil.move(layer_file, sub_dir.joinpath(layer_file.stem))
-
-            digest = Digest(f"{target.parent.name}:{target.stem}")
-            size = target.stat().st_size
-            layers.append(spec.Descriptor(mediaType=OCIImageMediaType.MediaTypeImageLayer, digest=digest, size=size))
-
-        image_config_path = sub_dir.joinpath(image_config_digest.hex)
-        with image_config_path.open("wb") as f:
-            f.write(self.image_config)
+        for layer_id in diff_ids_to_chain_ids(image_config.rootfs.diff_ids):
+            layer_id = Digest(layer_id)
+            src_file = self.target_dir.joinpath(f"{layer_id.hex}/layer.tar")
+            layer_digest = Digest.from_file(src_file)
+            target_file = sub_dir.joinpath(layer_digest.hex)
+            shutil.move(src_file, sub_dir.joinpath(target_file))
+            shutil.rmtree(self.target_dir.joinpath(layer_id.hex))
+            size = target_file.stat().st_size
+            layers.append(
+                spec.Descriptor(mediaType=OCIImageMediaType.MediaTypeImageLayer, digest=layer_digest, size=size)
+            )
 
         manifest = spec.Manifest(
             mediaType=OCIImageMediaType.MediaTypeImageManifest,
             config=spec.Descriptor(
                 mediaType=OCIImageMediaType.MediaTypeImageConfig,
                 digest=image_config_digest,
-                size=image_config_path.stat().st_size,
+                size=sub_dir.joinpath(image_config_digest.hex).stat().st_size,
             ),
             layers=layers,
         ).json(exclude_none=True, by_alias=True)
