@@ -30,14 +30,14 @@ AUTH_TYPE = Union[httpx._types.AuthTypes, Scope, None]
 GLOBAL_TOKEN_CACHE: Dict[str, "Token"] = {}
 
 
-class ChallengeScheme(Enum):
-    Bearer = "Bearer"
-    Basic = "Basic"
-
-
 def encode_auth(username: str, password: str) -> str:
     base_str = f"{username}:{password}"
     return base64.urlsafe_b64encode(base_str.encode()).decode()
+
+
+class ChallengeScheme(Enum):
+    Bearer = "Bearer"
+    Basic = "Basic"
 
 
 class Token:
