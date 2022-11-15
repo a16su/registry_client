@@ -1,4 +1,5 @@
 import hashlib
+import pathlib
 import re
 from collections import UserString
 from enum import Enum
@@ -74,7 +75,12 @@ class Digest(UserString):
         return self.data
 
     @classmethod
-    def from_bytes(cls, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM):
+    def from_file(cls, f: pathlib.Path) -> "Digest":
+        with open(f, "rb") as in_file:
+            return cls.from_bytes(in_file.read())
+
+    @classmethod
+    def from_bytes(cls, content: bytes, algorithm: Algorithm = DEFAULT_ALGORITHM) -> "Digest":
         hash_func = cls._get_hasher(algorithm)
         hash_value = hash_func(content).hexdigest()
         return Digest(f"{algorithm.value}:{hash_value}")

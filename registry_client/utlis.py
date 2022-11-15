@@ -1,5 +1,6 @@
 import hashlib
-from typing import List
+import json
+from typing import Generator, Iterable, List, Union
 
 from pydantic import BaseModel
 
@@ -20,13 +21,13 @@ def get_chain_id(parent: str, ids: List[str]) -> str:
     return get_chain_id(value, ids[1:])
 
 
-def diff_ids_to_chain_ids(diff_ids: List[str]) -> List[str]:
+def diff_ids_to_chain_ids(diff_ids: Iterable[Union[str, "Digest"]]) -> Generator[str, None, None]:
     assert diff_ids
-    result = [diff_ids[0]]
     parent = ""
-    for diff_id in diff_ids[1:]:
-        result.append(get_chain_id(result[-1], [diff_id]))
-    return result
+    for diff_id in diff_ids:
+        chain_id = get_chain_id(parent=parent, ids=[(str(diff_id))])
+        parent = chain_id
+        yield chain_id
 
 
 class CustomModel(BaseModel):
@@ -47,18 +48,3 @@ class CustomModel(BaseModel):
 #         config["parent"] = parent
 #     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
 
-
-# class V1Image(BaseModel):
-#     id: Optional[str]
-#     parent: Optional[str]
-#     comment: Optional[str]
-#     created: Optional[str]
-#     container: Optional[str]
-#     container_config: Optional[str]
-#     docker_version: Optional[str]
-#     author: Optional[str]
-#     config: Optional[str]
-#     architecture: Optional[str]
-#     variant: Optional[str]
-#     os: Optional[str]
-#     size: Optional[float]

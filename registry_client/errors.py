@@ -56,5 +56,10 @@ class ErrDigestUnsupported(Exception):
         super(ErrDigestUnsupported, self).__init__("unsupported digest algorithm")
 
 
+class ErrManifest(Exception):
+    def __init__(self):
+        super(ErrManifest, self).__init__("invalid image manifest")
+
+
 if __name__ == "__main__":
     raise ErrNameEmpty()
