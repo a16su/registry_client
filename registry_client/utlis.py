@@ -47,4 +47,3 @@ class CustomModel(BaseModel):
 #     if parent != "":
 #         config["parent"] = parent
 #     return f"sha256:{hashlib.sha256(str(config).encode()).hexdigest()}"
-

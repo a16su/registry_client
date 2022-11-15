@@ -99,14 +99,7 @@ def test_domain_regexp(value: str, match: bool):
         ("aa/asdf$$^/aa", False, []),
         ("asdf$$^/aa", False, []),
         ("aa-a/a", True, ["aa-a", "a"]),
-        (
-            "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
-            True,
-            [
-                "a",
-                "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a",
-            ],
-        ),
+        ("/".join("a" * 129), True, ["a", "/".join("a" * 128)]),
         ("a-/a/a/a", False, []),
         ("foo.com/a-/a/a", False, []),
         ("-foo/bar", False, []),
@@ -403,11 +396,11 @@ def test_short_identifier_regexp(value, match, result):
             "tag": "xn--n3h.com",
         },
         {
-            "input": "xn--7o8h.com/myimage:xn--7o8h.com@sha512:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "input": f"xn--7o8h.com/myimage:xn--7o8h.com@sha512:{'f' * 128}",
             "domain": "xn--7o8h.com",
             "repository": "xn--7o8h.com/myimage",
             "tag": "xn--7o8h.com",
-            "digest": "sha512:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "digest": f"sha512:{'f' * 128}",
         },
         {
             "input": "foo_bar.com:8080",
@@ -485,17 +478,17 @@ def test_short_identifier_regexp(value, match, result):
             "tag": "tag",
         },
         {
-            "input": "[2001:db8::1]:5000/repo@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "input": f"[2001:db8::1]:5000/repo@sha256:{'f' * 64}",
             "domain": "[2001:db8::1]:5000",
             "repository": "[2001:db8::1]:5000/repo",
-            "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "digest": f"sha256:{'f' * 64}",
         },
         {
-            "input": "[2001:db8::1]:5000/repo:tag@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "input": f"[2001:db8::1]:5000/repo:tag@sha256:{'f' * 64}",
             "domain": "[2001:db8::1]:5000",
             "repository": "[2001:db8::1]:5000/repo",
             "tag": "tag",
-            "digest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "digest": f"sha256:{'f' * 64}",
         },
         {
             "input": "[2001:db8::]:5000/repo",
