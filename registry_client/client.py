@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/24-下午4:06
+import pathlib
 from typing import List, Optional
 
 from loguru import logger
 
 from registry_client import errors
 from registry_client.auth import AuthClient
-from registry_client.image import ImageClient
+from registry_client.image import ImageClient, ImageFormat, ImagePullOptions
+from registry_client.platforms import Platform
 from registry_client.reference import (
     CanonicalReference,
     NamedReference,
@@ -94,3 +96,28 @@ class RegistryClient:
         resp.raise_for_status()
         logger.info(f"delete image:{image_name} success")
         return True
+
+    def pull_image(
+        self,
+        image_name: str,
+        save_dir: pathlib.Path,
+        platform: Platform = Platform(),
+        image_format: ImageFormat = ImageFormat.V2,
+    ) -> pathlib.Path:
+        """
+        pull image and tar
+        :param image_name: image name
+        :param save_dir: where to save the final image tar
+        :param platform: image platform
+        :param image_format: tar to `Docker V2` or `OCI`
+        :return: image file path
+        :rtype: pathlib.Path
+        """
+        ref = parse_normalized_named(image_name)
+        if save_dir.exists():
+            assert save_dir.is_dir(), Exception("save_dir must be a directory")
+        image_path = ImageClient(self.client).pull(
+            ref, options=ImagePullOptions(save_dir=save_dir, image_format=image_format, platform=platform)
+        )
+        assert image_path.exists() and image_path.is_file(), RuntimeError("Image Pull Failed")
+        return image_path
