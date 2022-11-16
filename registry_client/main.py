@@ -2,7 +2,7 @@
 # encoding : utf-8
 # create at: 2022/10/4-下午10:16
 import pathlib
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import BaseModel
 from typer import Argument, BadParameter, Context, Exit, Option, Typer, echo
@@ -90,6 +90,24 @@ def list_tags(
     client = new_client(ref)
     tags = client.list_tags(image_name=str(ref), limit=limit, last=last)
     echo(tags)
+
+
+@app.command("inspect")
+def inspect_image(
+    name: str = image_name_option,
+    platform: str = Option(
+        None,
+        "--platform",
+        "-p",
+        help="",
+        callback=platform_callback,
+        autocompletion=platform_complete,
+    ),
+):
+    ref: Reference = cast(Reference, name)
+    client = new_client(ref)
+    image_config = client.inspect_image(str(ref), platform=platform)
+    echo(image_config.json())
 
 
 @app.command("pull")
