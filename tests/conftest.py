@@ -232,3 +232,8 @@ def registry_tags(registry_mock):
 @pytest.fixture(scope="function")
 def registry_manifest(registry_mock):
     yield registry_mock.route(path__regex="/v2/(?P<repo>.*?)/(?P<name>.*?)/manifests/(?P<target>.*)", name="manifest")
+
+
+@pytest.fixture(scope="function")
+def registry_blobs(registry_mock):
+    yield registry_mock.route(path__regex="/v2/(?P<repo>.*?)/(?P<name>.*?)/blobs/(?P<digest>.*)", name="blobs")
