@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from registry_client.client import RegistryClient
+from registry_client.image import ImageClient
 from registry_client.platforms import OS, Arch, Platform
 from registry_client.reference import parse_normalized_named
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
@@ -59,11 +60,11 @@ class TestRegistryClient:
             registry_tags.respond(json={"tags": want})
             assert docker_registry_client.list_tags(**params) == want
 
-    def test_list_tags_with_unauthorized(self, docker_registry_client, registry_tags):
+    def test_list_tags_with_unauthorized(self, docker_registry_client, monkeypatch):
         for code in (401, 404):
-            registry_tags.respond(status_code=code)
+            resp = httpx.Response(status_code=code)
+            monkeypatch.setattr(ImageClient, "list_tag", lambda *args, **kwargs: resp)
             assert docker_registry_client.list_tags("foo/bar") == []
-            assert registry_tags.called
 
     @pytest.mark.parametrize(
         "host, image_name, target, want",
