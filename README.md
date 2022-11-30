@@ -45,3 +45,10 @@ repos = client.delete_image(
 )
 
 ```
+Credits
+===
+Thanks Jetbranins for their support of registry_client with awwsome suit for IDEs,
+visit [Jetbrains Open Source Support]( https://jb.gg/OpenSourceSupport) for more info  
+![JetBrains](docs/images/jb_beam.svg)
+![JetBrains](docs/images/PyCharm_icon.svg)
+![JetBrains](docs/images/GoLand_icon.svg)
