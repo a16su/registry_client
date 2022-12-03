@@ -117,7 +117,7 @@ def pull_image(
         None,
         "--platform",
         "-p",
-        help="",
+        help="default linux/amd64, exec `docker info -f '{{.OSType}}/{{.Architecture}}'` to view",
         callback=platform_callback,
         autocompletion=platform_complete,
     ),

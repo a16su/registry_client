@@ -8,8 +8,6 @@ from pydantic import BaseModel
 from registry_client.digest import Digest
 
 DEFAULT_SYSTEM = platform.system().lower()
-if DEFAULT_SYSTEM == "windows":
-    DEFAULT_SYSTEM = "linux"
 DEFAULT_MACHINE = platform.machine().lower()
 
 
