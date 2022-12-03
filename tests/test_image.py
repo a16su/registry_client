@@ -3,7 +3,12 @@ import pytest
 
 from registry_client import errors, spec
 from registry_client.digest import Digest
-from registry_client.reference import CanonicalReference, DigestReference, TaggedReference, parse_normalized_named
+from registry_client.reference import (
+    CanonicalReference,
+    DigestReference,
+    TaggedReference,
+    parse_normalized_named,
+)
 
 DEFAULT_IMAGE_NAME = "library/hello-world"
 
