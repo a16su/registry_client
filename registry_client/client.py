@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # encoding : utf-8
 # create at: 2022/9/24-下午4:06
+import json
 import pathlib
 import re
 import tempfile
+import typing
 from typing import List, Optional, Union
 
+import httpx
 from loguru import logger
 
 from registry_client import errors, spec
@@ -13,7 +16,7 @@ from registry_client.auth import AuthClient
 from registry_client.digest import Digest
 from registry_client.export import ImageFileSort, ImageV2Tar, OCIImageTar
 from registry_client.image import BlobClient, ImageClient, ImageFormat
-from registry_client.media_types import ImageMediaType
+from registry_client.media_types import ImageMediaType, OCIImageMediaType
 from registry_client.platforms import Platform
 from registry_client.reference import (
     CanonicalReference,
@@ -24,11 +27,7 @@ from registry_client.reference import (
     parse_normalized_named,
 )
 from registry_client.repo import RepoClient
-from registry_client.utlis import (
-    DEFAULT_REGISTRY_HOST,
-    DEFAULT_REPO,
-    diff_ids_to_chain_ids,
-)
+from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO, diff_ids_to_chain_ids
 
 
 class RegistryClient:
@@ -56,7 +55,7 @@ class RegistryClient:
         Retrieve a sorted, json list of repositories available in the registry.
 
         Args:
-            count (int): Limit the number of entries in each response. It not present, 100 entries will be returned.
+            count (int): Limit the number of entries in each response. If not present, 100 entries will be returned.
             last (str): Result set will include values lexically after last.
 
         Returns:
@@ -116,15 +115,16 @@ class RegistryClient:
         manifest_digest = self._image_client.get_manifest_digest(ref)
         return CanonicalReference(ref.domain, ref.path, digest=manifest_digest)
 
-    def _get_manifest(self, ref: CanonicalReference, platform: Platform) -> spec.Manifest:
+    def _get_manifest(self, ref: CanonicalReference, platform: Platform) -> httpx.Response:
         manifest_content_resp = self._image_client.get_manifest(ref)
         return self._image_client._handle_manifest(manifest_content_resp, ref, platform)
 
     def inspect_image(self, image_name: str, platform: Platform) -> spec.Image:
         ref = parse_normalized_named(image_name)
-        digest_ref = self._get_manifest_digest(ref)
 
-        manifest = self._get_manifest(digest_ref, platform)
+        digest_ref = self._get_manifest_digest(ref)
+        manifest_resp = self._get_manifest(digest_ref, platform)
+        manifest = spec.Manifest(**manifest_resp.json())
 
         image_digest_ref = CanonicalReference(ref.domain, ref.path, digest=manifest.config.digest)
         resp = self._image_client.get_config(image_digest_ref)
@@ -154,48 +154,141 @@ class RegistryClient:
         tmp_dir = tempfile.TemporaryDirectory(prefix="image_download_")
         temp_dir_path = pathlib.Path(tmp_dir.name)
         temp_dir_path.mkdir(exist_ok=True)
+        image_name = self.repo_tag(ref)
 
         digest_ref = self._get_manifest_digest(ref)
-
-        manifest = self._get_manifest(digest_ref, platform)
+        manifest_resp = self._get_manifest(digest_ref, platform)
+        manifest = spec.Manifest(**manifest_resp.json())
 
         image_digest_ref = CanonicalReference(ref.domain, ref.path, digest=manifest.config.digest)
         image_config_resp = self._image_client.get_config(image_digest_ref)
         image_config = spec.Image(**image_config_resp.json())
+        target = ref.target
+        image_save_path = save_dir.joinpath(f"{re.sub(r'[.:/]', '_', ref.name)}_{target}.tar")
 
-        assert len(image_config.rootfs.diff_ids) == len(manifest.layers), Exception("Invalid Manifest And ImageConfig")
-
-        with open(temp_dir_path.joinpath("image_config.json"), "wb") as f:
-            f.write(image_config_resp.content)
-
-        layer_id_generator = diff_ids_to_chain_ids(image_config.rootfs.diff_ids)
-
-        index = 0
-        for layer_id in layer_id_generator:
-            layer_path = temp_dir_path.joinpath(Digest(layer_id).hex)
-            layer_path.mkdir()
-            layer_desc = manifest.layers[index]
-            is_gzip = layer_desc.media_type == ImageMediaType.MediaTypeDockerSchema2LayerGzip
-            with open(layer_path.joinpath("layer.tar"), "wb") as f:
-                with self._blob_client.get(
-                    CanonicalReference(
-                        image_digest_ref.domain,
-                        image_digest_ref.path,
-                        digest=layer_desc.digest,
-                    ),
-                    stream=True,
-                ) as resp:
-                    if is_gzip and image_format != ImageFormat.OCI:  # oci image use gzip layer
-                        if resp.headers.get("Content-Encoding") is None:
-                            resp.headers["content-encoding"] = "gzip"  # let httpx decode gzip
-                    for content in resp.iter_bytes():
-                        f.write(content)
-            index += 1
-        image_path = self._tar_layers(
-            ref, layers_dir=temp_dir_path, save_dir=save_dir, image_format=image_format, compression=False
-        )
+        if image_format == ImageFormat.OCI:
+            self._pull_oci_image(
+                ref=image_digest_ref,
+                image_name=image_name,
+                save_dir=temp_dir_path,
+                manifest=manifest_resp,
+                image_config=image_config_resp,
+            )
+            image_path = OCIImageTar(src_dir=temp_dir_path, target_path=image_save_path).do()
+        elif image_format == ImageFormat.V2:
+            self._pull_docker_v2_image(
+                ref=image_digest_ref,
+                image_name=image_name,
+                save_dir=temp_dir_path,
+                manifest=manifest_resp,
+                image_config=image_config_resp,
+            )
+            image_path = ImageV2Tar(src_dir=temp_dir_path, target_path=image_save_path).do()
+        else:
+            raise RuntimeError(f"Invalid Image Format: {image_format}")
         assert image_path.exists() and image_path.is_file(), RuntimeError("Image Pull Failed")
         return image_path
+
+    def _download_blob(self, ref: CanonicalReference, target: pathlib.Path, content_encoding=None):
+        with open(target, "wb") as f:
+            with self._blob_client.get(ref, stream=True) as resp:
+                if content_encoding is not None:
+                    resp.headers["content-encoding"] = content_encoding
+                for content in resp.iter_bytes():
+                    f.write(content)
+
+    def _pull_docker_v2_image(
+        self,
+        ref: CanonicalReference,
+        image_name: str,
+        save_dir: pathlib.Path,
+        manifest: httpx.Response,
+        image_config: httpx.Response,
+    ):
+        manifest_spec = spec.Manifest(**manifest.json())
+        image_config_spec = spec.Image(**image_config.json())
+        layer_id_generator = diff_ids_to_chain_ids(image_config_spec.rootfs.diff_ids)
+
+        layer_path_list = []
+        for index, layer_id in enumerate(layer_id_generator):
+            layer_save_dir = save_dir.joinpath(Digest(layer_id).hex)
+            layer_save_dir.mkdir()
+            layer_desc = manifest_spec.layers[index]
+            new_ref = ref
+            new_ref.digest = layer_desc.digest
+            layer_path = layer_save_dir.joinpath("layer.tar")
+            encoding = (
+                "gzip"
+                if layer_desc.media_type
+                in (ImageMediaType.MediaTypeDockerSchema2LayerGzip, OCIImageMediaType.MediaTypeImageLayerGzip)
+                else None
+            )
+            self._download_blob(new_ref, layer_path, content_encoding=encoding)
+            layer_path_list.append(str(layer_path.relative_to(save_dir).as_posix()))
+
+        image_config_digest = Digest.from_bytes(image_config.content)
+        image_config_path = save_dir.joinpath(image_config_digest.hex)
+        image_config_path.write_bytes(image_config.content)
+
+        data = [
+            {
+                "Config": image_config_path.name,
+                "RepoTags": [image_name] if image_name else [],
+                "Layers": layer_path_list,
+            }
+        ]
+        with open(save_dir.joinpath("manifest.json"), "w") as out_file:
+            json.dump(data, out_file)
+
+    def _pull_oci_image(
+        self,
+        ref: CanonicalReference,
+        image_name: str,
+        save_dir: pathlib.Path,
+        manifest: httpx.Response,
+        image_config: httpx.Response,
+    ):
+        def write_json(content: bytes) -> typing.Tuple[Digest, pathlib.Path]:
+            d = Digest.from_bytes(content)
+            p = layer_save_dir.joinpath(f"{d.algom.value}/{d.hex}")
+            p.parent.mkdir(exist_ok=True)
+            p.write_bytes(content)
+            return d, p
+
+        layer_save_dir = save_dir.joinpath("blobs")
+        layer_save_dir.mkdir(parents=True)
+        layers: typing.List[spec.Descriptor] = []
+        for layer_spec in spec.Manifest(**manifest.json()).layers:
+            target_digest = layer_spec.digest
+            target_temp = layer_save_dir.joinpath(f"{target_digest.algom.value}/{target_digest.hex}")
+            if target_temp.exists():
+                continue
+            target_temp.parent.mkdir(exist_ok=True)
+            new_ref = ref
+            new_ref.digest = target_digest
+            self._download_blob(new_ref, target_temp)
+            size = target_temp.stat().st_size
+            layers.append(spec.Descriptor(mediaType=layer_spec.media_type, digest=target_digest, size=size))
+        write_json(image_config.content)
+
+        with save_dir.joinpath(spec.ImageLayoutFile).open("w", encoding="utf-8") as f:
+            json.dump(spec.ImageLayout().dict(by_alias=True), f)
+
+        manifest_digest, manifest_path = write_json(manifest.content)
+
+        index = spec.Index(
+            mediaType=OCIImageMediaType.MediaTypeImageIndex,
+            manifests=[
+                spec.Descriptor(
+                    mediaType=OCIImageMediaType.MediaTypeImageManifest,
+                    digest=manifest_digest,
+                    size=manifest_path.stat().st_size,
+                    annotations={spec.AnnotationsKey.AnnotationBaseImageName.value: image_name},
+                )
+            ],
+        ).json(exclude_none=True, by_alias=True)
+        with open(save_dir.joinpath("index.json"), "w") as f:
+            f.write(index)
 
     def repo_tag(self, reference: TaggedReference):
         assert reference != ""

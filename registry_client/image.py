@@ -20,12 +20,7 @@ from registry_client.digest import Digest
 from registry_client.errors import ImageNotFoundError
 from registry_client.manifest import ManifestClient
 from registry_client.platforms import Platform, filter_by_platform
-from registry_client.reference import (
-    CanonicalReference,
-    DigestReference,
-    NamedReference,
-    Reference,
-)
+from registry_client.reference import CanonicalReference, DigestReference, NamedReference, Reference
 from registry_client.scope import RepositoryScope
 
 MAX_MANIFEST_SIZE = 4 * 1048 * 1048
@@ -139,13 +134,13 @@ class ImageClient:
 
     def _handle_manifest(
         self, resp: httpx.Response, ref: CanonicalReference, platform: Platform = None
-    ) -> spec.Manifest:
+    ) -> httpx.Response:
         if resp.status_code == 404:
             raise ImageNotFoundError(ref)
         resp.raise_for_status()
         media_type = resp.headers.get("Content-Type")
         if media_type == ImageMediaType.MediaTypeDockerSchema2Manifest.value:
-            return spec.Manifest(**resp.json())
+            return resp
         elif media_type == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
             manifest_list = spec.Index(**resp.json())
             digest = filter_by_platform(manifest_list.manifests, target_platform=platform)
