@@ -20,7 +20,12 @@ from registry_client.digest import Digest
 from registry_client.errors import ImageNotFoundError
 from registry_client.manifest import ManifestClient
 from registry_client.platforms import Platform, filter_by_platform
-from registry_client.reference import CanonicalReference, DigestReference, NamedReference, Reference
+from registry_client.reference import (
+    CanonicalReference,
+    DigestReference,
+    NamedReference,
+    Reference,
+)
 from registry_client.scope import RepositoryScope
 
 MAX_MANIFEST_SIZE = 4 * 1048 * 1048

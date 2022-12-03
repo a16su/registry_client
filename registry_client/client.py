@@ -14,7 +14,7 @@ from loguru import logger
 from registry_client import errors, spec
 from registry_client.auth import AuthClient
 from registry_client.digest import Digest
-from registry_client.export import ImageFileSort, ImageV2Tar, OCIImageTar
+from registry_client.export import ImageV2Tar, OCIImageTar
 from registry_client.image import BlobClient, ImageClient, ImageFormat
 from registry_client.media_types import ImageMediaType, OCIImageMediaType
 from registry_client.platforms import Platform
@@ -27,7 +27,11 @@ from registry_client.reference import (
     parse_normalized_named,
 )
 from registry_client.repo import RepoClient
-from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO, diff_ids_to_chain_ids
+from registry_client.utlis import (
+    DEFAULT_REGISTRY_HOST,
+    DEFAULT_REPO,
+    diff_ids_to_chain_ids,
+)
 
 
 class RegistryClient:
@@ -303,47 +307,3 @@ class RegistryClient:
                 return f"{result[-1]}:{target}"
             return f"{reference.path}:{target}"
         return str(reference)
-
-    def _tar_layers(
-        self,
-        reference: Union[TaggedReference, CanonicalReference, DigestReference],
-        layers_dir: pathlib.Path,
-        save_dir: pathlib.Path,
-        image_format: ImageFormat,
-        compression: bool = False,
-    ) -> pathlib.Path:
-        """
-        |- layer_id1/layer.tar
-        |- layer_id2/layer.tar
-        |- image_config.json
-        Args:
-            reference:
-            layers_dir:
-            save_dir:
-            image_format:
-            compression
-
-        Returns:
-
-        """
-        target = reference.target
-        image_save_path = save_dir.joinpath(f"{re.sub(r'[.:/]', '_', reference.name)}_{target}.tar")
-        assert layers_dir.exists() and layers_dir.is_dir()
-        image_name = self.repo_tag(reference=reference)
-        sort_tool = ImageFileSort(
-            image_name=image_name,
-            target_dir=layers_dir,
-        )
-        format_handler = {ImageFormat.V2: ImageV2Tar, ImageFormat.OCI: OCIImageTar}
-        if image_format == ImageFormat.V2:
-            sort_tool.to_docker_v2()
-        elif image_format == ImageFormat.OCI:
-            sort_tool.to_oci()
-        else:
-            raise Exception("invalid image format")
-        final_path = format_handler[image_format](
-            src_dir=layers_dir,
-            target_path=image_save_path,
-            compress=compression,
-        ).do()
-        return final_path
