@@ -148,9 +148,10 @@ class ImageClient:
             return resp
         elif media_type == ImageMediaType.MediaTypeDockerSchema2ManifestList.value:
             manifest_list = spec.Index(**resp.json())
-            digest = filter_by_platform(manifest_list.manifests, target_platform=platform)
-            new_ref = CanonicalReference(ref.domain, ref.path, digest=digest)
-            resp = self._manifest_client.get(new_ref)
-            return self._handle_manifest(resp, ref, platform)
+            match_manifests = filter_by_platform(manifest_list.manifests, target_platform=platform)
+            for match in match_manifests:
+                new_ref = CanonicalReference(ref.domain, ref.path, digest=match.digest)
+                resp = self._manifest_client.get(new_ref)
+                return self._handle_manifest(resp, ref, platform)
         else:
             raise Exception("no match handler")

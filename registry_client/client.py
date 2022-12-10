@@ -224,7 +224,10 @@ class RegistryClient:
             encoding = (
                 "gzip"
                 if layer_desc.media_type
-                in (ImageMediaType.MediaTypeDockerSchema2LayerGzip, OCIImageMediaType.MediaTypeImageLayerGzip)
+                in (
+                    ImageMediaType.MediaTypeDockerSchema2LayerGzip,
+                    OCIImageMediaType.MediaTypeImageLayerGzip,
+                )
                 else None
             )
             self._download_blob(new_ref, layer_path, content_encoding=encoding)
