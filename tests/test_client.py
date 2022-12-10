@@ -8,7 +8,7 @@ import pytest
 
 from registry_client.client import RegistryClient
 from registry_client.image import ImageClient
-from registry_client.platforms import OS, Arch, Platform
+from registry_client.platforms import Platform
 from registry_client.reference import parse_normalized_named
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 from tests.test_image import DEFAULT_IMAGE_NAME
@@ -28,7 +28,7 @@ class TestRegistryClient:
             (DEFAULT_IMAGE_NAME, {}),
             (
                 DEFAULT_IMAGE_NAME + ":latest",
-                {"platform": Platform(os=OS.Linux, architecture=Arch.ARM_64)},
+                {"platform": Platform(os="linux", architecture="arm64")},
             ),
             (f"{DEFAULT_IMAGE_NAME}:linux", {}),
             (

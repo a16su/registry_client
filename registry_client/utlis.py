@@ -1,6 +1,7 @@
 import hashlib
-import json
-from typing import Generator, Iterable, List, Union
+import pathlib
+import platform
+from typing import Dict, Generator, Iterable, List, Union
 
 from pydantic import BaseModel
 
@@ -28,6 +29,24 @@ def diff_ids_to_chain_ids(diff_ids: Iterable[Union[str, "Digest"]]) -> Generator
         chain_id = get_chain_id(parent=parent, ids=[(str(diff_id))])
         parent = chain_id
         yield chain_id
+
+
+def get_cpu_info() -> List[Dict[str, str]]:
+    assert platform.system().lower() == "linux"
+    cpu_info: str = pathlib.Path("/proc/cpuinfo").read_text()
+    result = []
+    for one_core in cpu_info.split("\n\n"):
+        core_info = {}
+        for info in one_core.split("\n"):
+            info_split = info.split(":")
+            if len(info_split) == 2:
+                key, value = info_split
+            else:
+                key = info_split[0]
+                value = ""
+            core_info[key.strip()] = value.strip()
+        result.append(core_info)
+    return result
 
 
 class CustomModel(BaseModel):
