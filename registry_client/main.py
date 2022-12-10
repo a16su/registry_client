@@ -130,7 +130,12 @@ def pull_image(
         raise BadParameter(f"param:save_to({save_to}) must be a directory")
     ref = name
     client = new_client(ref)
-    image_path = client.pull_image(image_name=str(ref), save_dir=save_to, image_format=image_format, platform=platform)
+    image_path = client.pull_image(
+        image_name=str(ref),
+        save_dir=save_to,
+        image_format=image_format,
+        platform=platform,
+    )
     echo(f"image save to {image_path}")
 
 
