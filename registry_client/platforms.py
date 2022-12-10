@@ -427,7 +427,7 @@ def parse(specifier: str) -> Platform:
         return p
     elif p_len == 3:
         p.os = normalize_os(parts[0])
-        p.architecture, p.variant = normalize_arch(parts[1], parts[3])
+        p.architecture, p.variant = normalize_arch(parts[1], parts[2])
         if p.architecture == "arm64" and p.variant == "":
             p.variant = "v8"
         return p

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # encoding: utf-8
-import time
 import typing
 
 import httpx
 import pytest
 
+from registry_client import platforms
 from registry_client.client import RegistryClient
 from registry_client.image import ImageClient
-from registry_client.platforms import Platform
 from registry_client.reference import parse_normalized_named
 from registry_client.utlis import DEFAULT_REGISTRY_HOST, DEFAULT_REPO
 from tests.test_image import DEFAULT_IMAGE_NAME
@@ -26,11 +25,12 @@ class TestRegistryClient:
         "image_name, options",
         (
             (DEFAULT_IMAGE_NAME, {}),
+            (DEFAULT_IMAGE_NAME, {"platform": "linux/amd64"}),
             (
                 DEFAULT_IMAGE_NAME + ":latest",
-                {"platform": Platform(os="linux", architecture="arm64")},
+                {"platform": "linux/arm64/v5"},
             ),
-            (f"{DEFAULT_IMAGE_NAME}:linux", {}),
+            (f"{DEFAULT_IMAGE_NAME}:linux", {"platform": "linux"}),
             (
                 f"{DEFAULT_IMAGE_NAME}@sha256:f54a58bc1aac5ea1a25d796ae155dc228b3f0e11d046ae276b39c4bf2f13d8c4",
                 {},
@@ -39,6 +39,8 @@ class TestRegistryClient:
     )
     def test_pull(self, docker_registry_client, image_save_dir, image_name, options):
         options.update(save_dir=image_save_dir)
+        if options.get("platform"):
+            options["platform"] = platforms.parse(options.get("platform"))
         self._check_pull_image(docker_registry_client, image_name=image_name, options=options)
 
     @pytest.mark.parametrize(
